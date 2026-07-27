@@ -219,3 +219,6 @@ __marimo__/
 
 # raw data
 data/
+
+# local test photos (personal/biometric, never commit)
+skin_tracking/test_images/

@@ -23,7 +23,7 @@ def score_zone(image: Image.Image) -> dict:
     label = top["label"]
 
     # Labels look like "Level -1: Clear Skin" through "Level 4: Very Severe Acne"
-    match = re.search(r"Level (-?\d+)", label)
+    match = re.search(r"Level (-?\d+)", label, re.IGNORECASE)
     if match:
         level = int(match.group(1))
         # Levels run -1 to 4 (6 total) -> map onto 0-100

@@ -2,7 +2,7 @@ flask
 flask-cors
 supabase
 python-dotenv
-mediapipe
+mediapipe==0.10.21
 transformers
 torch
 pillow
