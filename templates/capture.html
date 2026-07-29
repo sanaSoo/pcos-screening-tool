@@ -24,10 +24,15 @@
 </head>
 <body>
   <h1>Skin Tracking Capture</h1>
-  <p>Line yourself up in frame, then click Capture.</p>
+  <p id="prompt">Position yourself: we'll take three photos — left profile, right profile, then front.</p>
 
   <video id="video" autoplay playsinline muted></video>
   <canvas id="canvas"></canvas>
+
+  <div style="margin-top:12px; display:flex; gap:8px; justify-content:center;">
+    <div><strong>Step:</strong> <span id="stepLabel">Left profile</span></div>
+    <div id="thumbs" style="display:flex; gap:8px; align-items:center;"></div>
+  </div>
 
   <div class="controls">
     <button id="captureBtn" class="primary">Capture</button>
@@ -50,6 +55,30 @@ async function startCamera() {
 startCamera().catch(err => {
   errorDiv.textContent = 'Camera error: ' + err.message;
 });
+let step = 0; // 0: left, 1: right, 2: front
+const stepNames = ['Left profile', 'Right profile', 'Front'];
+const thumbs = document.getElementById('thumbs');
+const stepLabel = document.getElementById('stepLabel');
+const captures = [null, null, null];
+
+function updateUI() {
+  stepLabel.textContent = stepNames[step];
+  // update thumbnails
+  thumbs.innerHTML = '';
+  for (let i = 0; i < captures.length; i++) {
+    const img = document.createElement('img');
+    img.style.width = '72px';
+    img.style.height = '72px';
+    img.style.objectFit = 'cover';
+    img.style.borderRadius = '6px';
+    img.style.border = i === step ? '2px solid #2c6e49' : '1px solid #ddd';
+    img.alt = stepNames[i];
+    img.src = captures[i] || 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72"><rect width="100%" height="100%" fill="%23f5f5f5"/></svg>';
+    thumbs.appendChild(img);
+  }
+}
+
+updateUI();
 
 captureBtn.addEventListener('click', async () => {
   errorDiv.textContent = '';
@@ -60,6 +89,18 @@ captureBtn.addEventListener('click', async () => {
   canvas.getContext('2d').drawImage(video, 0, 0);
   const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
 
+  // store thumbnail for this step
+  captures[step] = dataUrl;
+  updateUI();
+
+  // if not the final (front) image, advance to next step and prompt user
+  if (step < 2) {
+    step += 1;
+    captureBtn.textContent = 'Capture';
+    return;
+  }
+
+  // final step: submit all three images for analysis
   captureBtn.disabled = true;
   captureBtn.textContent = 'Analyzing...';
 
@@ -67,7 +108,9 @@ captureBtn.addEventListener('click', async () => {
     const resp = await fetch('/api/skin-capture', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image: dataUrl }),
+      body: JSON.stringify({
+        images: { left: captures[0], right: captures[1], front: captures[2] },
+      }),
     });
     const data = await resp.json();
     if (!resp.ok) {
@@ -79,6 +122,10 @@ captureBtn.addEventListener('click', async () => {
   } finally {
     captureBtn.disabled = false;
     captureBtn.textContent = 'Capture again';
+    // reset for another capture sequence
+    step = 0;
+    captures.fill(null);
+    updateUI();
   }
 });
 
