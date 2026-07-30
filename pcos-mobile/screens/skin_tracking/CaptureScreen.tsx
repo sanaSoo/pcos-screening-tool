@@ -11,13 +11,22 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { SvgXml } from "react-native-svg";
 
+import { cameraRetakeXml, profileSilhouetteXml } from "../../assets/camera/icons";
+import NavigationBar from "../../components/NavigationBar";
 import {
   SkinCaptureResponse,
   submitSkinCapture,
 } from "../../lib/skin_tracking_api";
 
 const STEP_NAMES = ["Left profile", "Right profile", "Front"];
+
+type Props = {
+  onPressHome?: () => void;
+  onPressQuickCheckIn?: () => void;
+};
 
 // expo-camera always writes the captured photo to a cache file on disk (photo.uri)
 // even when we only use the inline base64 data. We never need that file, so delete
@@ -32,7 +41,7 @@ function deleteCachedPhoto(uri: string) {
   }
 }
 
-export default function CaptureScreen() {
+export default function CaptureScreen({ onPressHome, onPressQuickCheckIn }: Props) {
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
 
@@ -48,19 +57,24 @@ export default function CaptureScreen() {
   const [zoomedZone, setZoomedZone] = useState<string | null>(null);
 
   if (!permission) {
-    return <View style={styles.center} />;
+    return <SafeAreaView style={styles.center} />;
   }
 
   if (!permission.granted) {
     return (
-      <View style={styles.center}>
+      <SafeAreaView style={styles.center}>
         <Text style={styles.prompt}>
           Camera access is needed to capture skin-tracking photos.
         </Text>
         <TouchableOpacity style={styles.primaryButton} onPress={requestPermission}>
           <Text style={styles.primaryButtonText}>Grant camera access</Text>
         </TouchableOpacity>
-      </View>
+        {onPressHome && (
+          <TouchableOpacity style={styles.homeLink} onPress={onPressHome}>
+            <Text style={styles.homeLinkText}>Back to home</Text>
+          </TouchableOpacity>
+        )}
+      </SafeAreaView>
     );
   }
 
@@ -118,7 +132,9 @@ export default function CaptureScreen() {
       : null;
 
     return (
+      <SafeAreaView style={styles.screenWrapper}>
       <ScrollView contentContainerStyle={styles.resultsContainer}>
+        <Text style={styles.heading}>ACNE TRACKER</Text>
         <Text style={styles.overall}>
           Overall severity: {results.scores.overall}
         </Text>
@@ -184,12 +200,27 @@ export default function CaptureScreen() {
           </TouchableOpacity>
         </Modal>
       </ScrollView>
+      <NavigationBar onPressHome={onPressHome} onPressQuickCheckIn={onPressQuickCheckIn} />
+      </SafeAreaView>
     );
   }
 
   return (
+    <SafeAreaView style={styles.screenWrapper}>
     <View style={styles.container}>
-      <CameraView ref={cameraRef} style={styles.camera} facing="front" />
+      <Text style={styles.heading}>ACNE TRACKER</Text>
+
+      <View style={styles.cameraFrame}>
+        <CameraView ref={cameraRef} style={styles.camera} facing="front" />
+        <SvgXml
+          xml={profileSilhouetteXml}
+          width={160}
+          height={143}
+          color="#365013"
+          opacity={0.6}
+          style={styles.silhouetteOverlay}
+        />
+      </View>
 
       <Text style={styles.prompt}>
         Position yourself: we&apos;ll take three photos — left profile, right
@@ -199,19 +230,29 @@ export default function CaptureScreen() {
       <View style={styles.stepRow}>
         <Text style={styles.stepLabel}>Step: {STEP_NAMES[step]}</Text>
         <View style={styles.thumbRow}>
-          {captures.map((capture, i) => (
-            <View
-              key={i}
-              style={[
-                styles.thumb,
-                i === step ? styles.thumbActive : styles.thumbInactive,
-              ]}
-            >
-              {capture && (
-                <Image source={{ uri: capture }} style={styles.thumbImage} />
-              )}
-            </View>
-          ))}
+          {captures.map((capture, i) => {
+            const canRetake = capture && !submitting;
+            return (
+              <TouchableOpacity
+                key={i}
+                disabled={!canRetake}
+                onPress={() => setStep(i)}
+                style={[
+                  styles.thumb,
+                  i === step ? styles.thumbActive : styles.thumbInactive,
+                ]}
+              >
+                {capture && (
+                  <Image source={{ uri: capture }} style={styles.thumbImage} />
+                )}
+                {canRetake && (
+                  <View style={styles.retakeBadge}>
+                    <SvgXml xml={cameraRetakeXml} width={14} height={13} color="#365013" />
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </View>
 
@@ -225,22 +266,47 @@ export default function CaptureScreen() {
         {submitting ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.primaryButtonText}>Capture</Text>
+          <Text style={styles.primaryButtonText}>
+            {step < 2 ? "Capture" : "Submit"}
+          </Text>
         )}
       </TouchableOpacity>
     </View>
+    <NavigationBar onPressHome={onPressHome} />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, paddingTop: 60 },
+  screenWrapper: { flex: 1, backgroundColor: "#fff7e7" },
+  container: { flex: 1, padding: 16, paddingTop: 40 },
   center: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     padding: 24,
   },
-  camera: { flex: 1, borderRadius: 8 },
+  heading: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#000",
+    textAlign: "center",
+    marginBottom: 12,
+  },
+  cameraFrame: {
+    flex: 1,
+    borderRadius: 15,
+    borderWidth: 3,
+    borderColor: "#365013",
+    overflow: "hidden",
+    backgroundColor: "#fff",
+  },
+  camera: { flex: 1 },
+  silhouetteOverlay: {
+    position: "absolute",
+    alignSelf: "center",
+    top: "20%",
+  },
   prompt: { fontSize: 14, color: "#444", marginTop: 12, textAlign: "center" },
   stepRow: { marginTop: 12, alignItems: "center" },
   stepLabel: { fontWeight: "600", marginBottom: 8 },
@@ -250,22 +316,37 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: 6,
     borderWidth: 2,
-    overflow: "hidden",
+    overflow: "visible",
     backgroundColor: "#f5f5f5",
   },
-  thumbActive: { borderColor: "#2c6e49" },
+  thumbActive: { borderColor: "#365013" },
   thumbInactive: { borderColor: "#ddd" },
-  thumbImage: { width: "100%", height: "100%" },
+  thumbImage: { width: "100%", height: "100%", borderRadius: 4 },
+  retakeBadge: {
+    position: "absolute",
+    bottom: -8,
+    right: -8,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "#fff7e7",
+    borderWidth: 1,
+    borderColor: "#365013",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   error: { color: "#c0392b", marginTop: 12, textAlign: "center" },
   primaryButton: {
-    backgroundColor: "#2c6e49",
+    backgroundColor: "#365013",
     borderRadius: 8,
     paddingVertical: 14,
     alignItems: "center",
     marginTop: 16,
   },
   primaryButtonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  resultsContainer: { padding: 16, paddingTop: 60 },
+  homeLink: { marginTop: 16 },
+  homeLinkText: { color: "#365013", fontSize: 14, fontWeight: "600" },
+  resultsContainer: { padding: 16, paddingTop: 40 },
   overall: { fontSize: 20, fontWeight: "600", marginBottom: 16 },
   zoneGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   zoneCard: {
