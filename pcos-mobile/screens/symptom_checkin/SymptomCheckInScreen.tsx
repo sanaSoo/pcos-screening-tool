@@ -10,6 +10,7 @@ type Props = {
   onPressHairTracker?: () => void;
   onPressAnalytics?: () => void;
   onPressHome?: () => void;
+  onPressProfile?: () => void;
 };
 
 export default function SymptomCheckInScreen({
@@ -17,6 +18,7 @@ export default function SymptomCheckInScreen({
   onPressHairTracker,
   onPressAnalytics,
   onPressHome,
+  onPressProfile,
 }: Props) {
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
@@ -76,7 +78,7 @@ export default function SymptomCheckInScreen({
         </TouchableOpacity>
       </ScrollView>
 
-      <NavigationBar onPressHome={onPressHome} />
+      <NavigationBar onPressHome={onPressHome} onPressProfile={onPressProfile} />
     </SafeAreaView>
   );
 }

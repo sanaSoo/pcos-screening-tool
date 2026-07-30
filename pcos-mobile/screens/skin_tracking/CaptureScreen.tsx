@@ -26,6 +26,7 @@ const STEP_NAMES = ["Left profile", "Right profile", "Front"];
 type Props = {
   onPressHome?: () => void;
   onPressQuickCheckIn?: () => void;
+  onPressProfile?: () => void;
 };
 
 // expo-camera always writes the captured photo to a cache file on disk (photo.uri)
@@ -41,7 +42,7 @@ function deleteCachedPhoto(uri: string) {
   }
 }
 
-export default function CaptureScreen({ onPressHome, onPressQuickCheckIn }: Props) {
+export default function CaptureScreen({ onPressHome, onPressQuickCheckIn, onPressProfile }: Props) {
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
 
@@ -200,7 +201,7 @@ export default function CaptureScreen({ onPressHome, onPressQuickCheckIn }: Prop
           </TouchableOpacity>
         </Modal>
       </ScrollView>
-      <NavigationBar onPressHome={onPressHome} onPressQuickCheckIn={onPressQuickCheckIn} />
+      <NavigationBar onPressHome={onPressHome} onPressQuickCheckIn={onPressQuickCheckIn} onPressProfile={onPressProfile} />
       </SafeAreaView>
     );
   }
@@ -272,7 +273,7 @@ export default function CaptureScreen({ onPressHome, onPressQuickCheckIn }: Prop
         )}
       </TouchableOpacity>
     </View>
-    <NavigationBar onPressHome={onPressHome} />
+    <NavigationBar onPressHome={onPressHome} onPressProfile={onPressProfile} />
     </SafeAreaView>
   );
 }

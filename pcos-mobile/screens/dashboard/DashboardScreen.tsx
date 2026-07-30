@@ -61,6 +61,7 @@ type Props = {
   onPressCycleTracking?: () => void;
   onPressAnalytics?: () => void;
   onSelectDate?: (date: Date) => void;
+  onPressProfile?: () => void;
 };
 
 export default function DashboardScreen({
@@ -71,6 +72,7 @@ export default function DashboardScreen({
   onPressCycleTracking,
   onPressAnalytics,
   onSelectDate,
+  onPressProfile,
 }: Props) {
   const { width: screenWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -103,17 +105,13 @@ export default function DashboardScreen({
       }}
     >
       {/* profile photo + hand-drawn halo */}
-      <Image
-        source={profilePhoto}
-        style={{
-          position: "absolute",
-          left: s(35),
-          top: t(31),
-          width: s(70),
-          height: s(90),
-          borderRadius: s(12),
-        }}
-      />
+      <TouchableOpacity
+        activeOpacity={0.8}
+        onPress={onPressProfile}
+        style={{ position: "absolute", left: s(35), top: t(31), width: s(70), height: s(90) }}
+      >
+        <Image source={profilePhoto} style={{ width: s(70), height: s(90), borderRadius: s(12) }} />
+      </TouchableOpacity>
       {DOODLE_RING.map((mark, i) => (
         <View
           key={i}
