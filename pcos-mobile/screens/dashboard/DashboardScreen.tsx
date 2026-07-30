@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { SvgXml } from "react-native-svg";
 import {
   Image,
@@ -20,8 +21,15 @@ import {
   sproutXml,
   weatherXml,
 } from "../../assets/dashboard/icons";
+import DateWheel from "../../components/DateWheel";
 
 const profilePhoto = require("../../assets/shared/profile-photo.png");
+
+function formatClock(date: Date) {
+  let h = date.getHours() % 12;
+  if (h === 0) h = 12;
+  return { hour: String(h), minute: String(date.getMinutes()).padStart(2, "0") };
+}
 
 // The dashboard is reproduced with the exact x/y/width/height from the Figma
 // frame (390x844), scaled to the device width, rather than approximated with
@@ -45,44 +53,24 @@ const DOODLE_RING = Array.from({ length: 8 }, (_, i) => {
   };
 });
 
-type DayPill = {
-  letter: string;
-  num: string;
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-  faded: boolean;
-  active: boolean;
-};
-
-const WEEK: DayPill[] = [
-  { letter: "M", num: "20", left: 36, top: 328, width: 39, height: 78, faded: true, active: false },
-  { letter: "Tu", num: "21", left: 86, top: 319, width: 46, height: 92, faded: false, active: false },
-  { letter: "W", num: "22", left: 143, top: 319, width: 47, height: 92, faded: false, active: false },
-  { letter: "Th", num: "23", left: 200, top: 319, width: 47, height: 92, faded: false, active: true },
-  { letter: "F", num: "24", left: 258, top: 319, width: 46, height: 92, faded: false, active: false },
-  { letter: "Su", num: "25", left: 315, top: 328, width: 39, height: 78, faded: true, active: false },
-];
-
 type Props = {
   userName?: string;
-  time?: string;
   daysTracking?: number;
   onPressSymptomCheckIn?: () => void;
   onPressMealTracker?: () => void;
   onPressCycleTracking?: () => void;
   onPressAnalytics?: () => void;
+  onSelectDate?: (date: Date) => void;
 };
 
 export default function DashboardScreen({
   userName = "Jane",
-  time = "11:30",
   daysTracking = 0,
   onPressSymptomCheckIn,
   onPressMealTracker,
   onPressCycleTracking,
   onPressAnalytics,
+  onSelectDate,
 }: Props) {
   const { width: screenWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -95,7 +83,15 @@ export default function DashboardScreen({
   // at the top since the ribbon already occupies that space visually.
   const LIFT = s(36);
   const t = (n: number) => insets.top + s(n) - LIFT;
-  const [hour, minute] = time.split(":");
+
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    // Only H:MM is shown, so a 30s cadence keeps the minute accurate to
+    // within 30s without re-rendering the screen every second.
+    const id = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(id);
+  }, []);
+  const { hour, minute } = formatClock(now);
 
   return (
     <ScrollView
@@ -147,11 +143,11 @@ export default function DashboardScreen({
       >
         Good morning {userName}!
       </Text>
-      <View style={{ position: "absolute", left: s(272), top: t(150), width: s(71), alignItems: "center" }}>
-        <Text style={{ fontSize: s(44), fontWeight: "800", color: "#000", lineHeight: s(48) }}>
+      <View style={{ position: "absolute", left: s(262), top: t(150), width: s(90), alignItems: "center" }}>
+        <Text numberOfLines={1} style={{ fontSize: s(44), fontWeight: "800", color: "#000", lineHeight: s(48) }}>
           {hour}
         </Text>
-        <Text style={{ fontSize: s(44), fontWeight: "800", color: "#000", lineHeight: s(48) }}>
+        <Text numberOfLines={1} style={{ fontSize: s(44), fontWeight: "800", color: "#000", lineHeight: s(48) }}>
           :{minute}
         </Text>
       </View>
@@ -182,55 +178,9 @@ export default function DashboardScreen({
       </View>
 
       {/* days of the week */}
-      {WEEK.map((day) => (
-        <View
-          key={day.letter + day.num}
-          style={{
-            position: "absolute",
-            left: s(day.left),
-            top: t(day.top),
-            width: s(day.width),
-            height: s(day.height),
-            borderRadius: s(20),
-            alignItems: "center",
-            justifyContent: "center",
-            gap: s(4),
-            backgroundColor: day.faded
-              ? "rgba(244,154,163,0.54)"
-              : day.active
-                ? "#e47083"
-                : "#f49aa3",
-            ...(day.active
-              ? {
-                  shadowColor: "rgba(244,154,163,0.49)",
-                  shadowOffset: { width: 0, height: s(4) },
-                  shadowOpacity: 1,
-                  shadowRadius: s(4),
-                  elevation: 4,
-                }
-              : null),
-          }}
-        >
-          <Text
-            style={{
-              fontSize: s(day.faded ? 17 : 20),
-              fontWeight: "800",
-              color: day.faded ? "rgba(255,247,231,0.54)" : "#fff7e7",
-            }}
-          >
-            {day.letter}
-          </Text>
-          <Text
-            style={{
-              fontSize: s(day.faded ? 17 : 20),
-              fontWeight: "800",
-              color: day.faded ? "rgba(255,247,231,0.54)" : "#fff7e7",
-            }}
-          >
-            {day.num}
-          </Text>
-        </View>
-      ))}
+      <View style={{ position: "absolute", left: s(36), top: t(319), width: s(318), height: s(92) }}>
+        <DateWheel onSelectDate={onSelectDate} />
+      </View>
 
       {/* whats up today */}
       <Text
