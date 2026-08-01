@@ -5,14 +5,17 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { getSession, signOut } from "./lib/auth";
 import { listCycles } from "./lib/cycles_api";
+import AnalyticsScreen from "./screens/analytics/AnalyticsScreen";
 import CycleTrackingScreen from "./screens/cycles/CycleTrackingScreen";
 import DashboardScreen from "./screens/dashboard/DashboardScreen";
+import HairTrackerScreen from "./screens/hair/HairTrackerScreen";
 import LoginScreen from "./screens/login/LoginScreen";
 import NotesScreen from "./screens/notes/NotesScreen";
 import ProfileScreen from "./screens/profile/ProfileScreen";
 import CaptureScreen from "./screens/skin_tracking/CaptureScreen";
 import SignUpScreen from "./screens/signup/SignUpScreen";
 import SymptomCheckInScreen from "./screens/symptom_checkin/SymptomCheckInScreen";
+import TreatmentLogScreen from "./screens/treatments/TreatmentLogScreen";
 import WelcomeScreen from "./screens/welcome/WelcomeScreen";
 
 type Screen =
@@ -22,9 +25,12 @@ type Screen =
   | "dashboard"
   | "symptomCheckIn"
   | "capture"
+  | "hairTracker"
+  | "analytics"
   | "profile"
   | "cycleTracking"
-  | "notes";
+  | "notes"
+  | "treatmentLog";
 
 const SCREEN_BACKGROUNDS: Record<Screen, string> = {
   welcome: "#ffcc7d",
@@ -33,9 +39,12 @@ const SCREEN_BACKGROUNDS: Record<Screen, string> = {
   dashboard: "#fff7e7",
   symptomCheckIn: "#fff7e7",
   capture: "#fff7e7",
+  hairTracker: "#fff7e7",
+  analytics: "#fff7e7",
   profile: "#fff7e7",
   cycleTracking: "#fff7e7",
   notes: "#fff7e7",
+  treatmentLog: "#fff7e7",
 };
 
 const comingSoon = (feature: string) => () =>
@@ -104,20 +113,38 @@ export default function App() {
           <DashboardScreen
             onPressSymptomCheckIn={() => setScreen("symptomCheckIn")}
             onPressCycleTracking={() => setScreen("cycleTracking")}
+            onPressAnalytics={() => setScreen("analytics")}
             onPressProfile={goProfile}
             onPressNotes={() => setScreen("notes")}
+            onPressTreatmentLog={() => setScreen("treatmentLog")}
           />
         )}
         {screen === "symptomCheckIn" && (
           <SymptomCheckInScreen
             onPressAcneTracker={() => setScreen("capture")}
-            onPressHairTracker={comingSoon("Hair Tracker")}
+            onPressHairTracker={() => setScreen("hairTracker")}
+            onPressAnalytics={() => setScreen("analytics")}
+            onPressTreatmentLog={() => setScreen("treatmentLog")}
             onPressHome={goHome}
             onPressProfile={goProfile}
           />
         )}
         {screen === "capture" && (
           <CaptureScreen
+            onPressHome={goHome}
+            onPressQuickCheckIn={() => setScreen("symptomCheckIn")}
+            onPressProfile={goProfile}
+          />
+        )}
+        {screen === "hairTracker" && (
+          <HairTrackerScreen
+            onPressHome={goHome}
+            onPressQuickCheckIn={() => setScreen("symptomCheckIn")}
+            onPressProfile={goProfile}
+          />
+        )}
+        {screen === "analytics" && (
+          <AnalyticsScreen
             onPressHome={goHome}
             onPressQuickCheckIn={() => setScreen("symptomCheckIn")}
             onPressProfile={goProfile}
@@ -142,6 +169,13 @@ export default function App() {
         )}
         {screen === "notes" && (
           <NotesScreen
+            onPressHome={goHome}
+            onPressQuickCheckIn={() => setScreen("symptomCheckIn")}
+            onPressProfile={goProfile}
+          />
+        )}
+        {screen === "treatmentLog" && (
+          <TreatmentLogScreen
             onPressHome={goHome}
             onPressQuickCheckIn={() => setScreen("symptomCheckIn")}
             onPressProfile={goProfile}

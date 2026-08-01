@@ -25,6 +25,7 @@ import {
   startCycle,
   toDateKey,
 } from "../../lib/cycles_api";
+import { formatShortDate, inclusiveDayCount } from "../../lib/date_format";
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -40,18 +41,8 @@ function shiftMonth(view: ViewMonth, delta: number): ViewMonth {
   return { year: d.getFullYear(), month: d.getMonth() };
 }
 
-function formatShort(dateKey: string) {
-  const [, m, d] = dateKey.split("-").map(Number);
-  return `${MONTH_NAMES[m - 1].slice(0, 3)} ${d}`;
-}
-
-function dayCount(startKey: string, endKey: string) {
-  const [sy, sm, sd] = startKey.split("-").map(Number);
-  const [ey, em, ed] = endKey.split("-").map(Number);
-  const start = new Date(sy, sm - 1, sd);
-  const end = new Date(ey, em - 1, ed);
-  return Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
-}
+const formatShort = formatShortDate;
+const dayCount = inclusiveDayCount;
 
 type Props = {
   onPressHome?: () => void;

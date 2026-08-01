@@ -2,6 +2,7 @@ import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-nati
 import { SafeAreaView } from "react-native-safe-area-context";
 import { SvgXml } from "react-native-svg";
 
+import { pillIconXml } from "../../assets/treatments/icons";
 import { faceIdXml, hairSkinXml, trendUpXml } from "../../assets/symptom_checkin/icons";
 import InfoButton from "../../components/InfoButton";
 import NavigationBar from "../../components/NavigationBar";
@@ -10,6 +11,7 @@ type Props = {
   onPressAcneTracker?: () => void;
   onPressHairTracker?: () => void;
   onPressAnalytics?: () => void;
+  onPressTreatmentLog?: () => void;
   onPressHome?: () => void;
   onPressProfile?: () => void;
 };
@@ -18,6 +20,7 @@ export default function SymptomCheckInScreen({
   onPressAcneTracker,
   onPressHairTracker,
   onPressAnalytics,
+  onPressTreatmentLog,
   onPressHome,
   onPressProfile,
 }: Props) {
@@ -81,6 +84,15 @@ export default function SymptomCheckInScreen({
         >
           <Text style={styles.analyticsText}>Analytics/Trends</Text>
           <SvgXml xml={trendUpXml} width={22} height={15} />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.treatmentLogButton}
+          onPress={onPressTreatmentLog}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.treatmentLogText}>Treatment Log</Text>
+          <SvgXml xml={pillIconXml} width={18} height={18} color="#fff7e7" />
         </TouchableOpacity>
       </ScrollView>
 
@@ -148,4 +160,15 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   analyticsText: { color: "#fff7e7", fontSize: 14, fontWeight: "800" },
+  treatmentLogButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#f49aa3",
+    borderRadius: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    marginTop: 12,
+  },
+  treatmentLogText: { color: "#fff7e7", fontSize: 14, fontWeight: "800" },
 });

@@ -18,9 +18,9 @@ import {
   doodleV10Xml,
   mealieXml,
   sealCheckXml,
-  sproutXml,
   weatherXml,
 } from "../../assets/dashboard/icons";
+import { pillIconXml } from "../../assets/treatments/icons";
 import DateWheel from "../../components/DateWheel";
 import InfoButton from "../../components/InfoButton";
 import {
@@ -79,6 +79,7 @@ type Props = {
   onSelectDate?: (date: Date) => void;
   onPressProfile?: () => void;
   onPressNotes?: () => void;
+  onPressTreatmentLog?: () => void;
 };
 
 export default function DashboardScreen({
@@ -91,6 +92,7 @@ export default function DashboardScreen({
   onSelectDate,
   onPressProfile,
   onPressNotes,
+  onPressTreatmentLog,
 }: Props) {
   const { width: screenWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -238,15 +240,6 @@ export default function DashboardScreen({
         </SvgText>
       </Svg>
 
-      {/* sprout (renders before the cards so the card colors mask the overlap, reading as growing up from behind them) */}
-      <SvgXml
-        xml={sproutXml}
-        width={s(184)}
-        height={s(248)}
-        pointerEvents="none"
-        style={{ position: "absolute", left: s(200), top: t(603) }}
-      />
-
       {/* cards */}
       <TouchableOpacity
         activeOpacity={0.8}
@@ -311,6 +304,16 @@ export default function DashboardScreen({
       <Text style={{ position: "absolute", left: s(64), top: t(695), fontSize: s(14), fontWeight: "800", color: "#fff7e7" }} pointerEvents="none">
         Analytics/Trends
       </Text>
+
+      {/* treatment log button — occupies the space the sprout illustration used to fill */}
+      <TouchableOpacity
+        activeOpacity={0.8}
+        onPress={onPressTreatmentLog}
+        style={{ position: "absolute", left: s(232), top: t(672), width: s(129), height: s(61), borderRadius: s(10), backgroundColor: "#f49aa3", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: s(6) }}
+      >
+        <SvgXml xml={pillIconXml} width={s(20)} height={s(20)} color="#fff7e7" />
+        <Text style={{ fontSize: s(13), fontWeight: "800", color: "#fff7e7" }}>Treatments</Text>
+      </TouchableOpacity>
 
       {/* caption */}
       <Text style={{ position: "absolute", left: s(29), top: t(750), width: s(221), fontSize: s(14), fontWeight: "800", color: "#000" }}>

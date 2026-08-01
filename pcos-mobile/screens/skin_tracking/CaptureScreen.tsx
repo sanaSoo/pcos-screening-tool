@@ -19,6 +19,7 @@ import InfoButton from "../../components/InfoButton";
 import NavigationBar from "../../components/NavigationBar";
 import { markTrackedThisWeek } from "../../lib/daily_tracking";
 import {
+  saveSkinCaptureHistory,
   SkinCaptureResponse,
   submitSkinCapture,
 } from "../../lib/skin_tracking_api";
@@ -114,6 +115,7 @@ export default function CaptureScreen({ onPressHome, onPressQuickCheckIn, onPres
       });
       setResults(data);
       markTrackedThisWeek("acne");
+      saveSkinCaptureHistory(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Request failed");
     } finally {
