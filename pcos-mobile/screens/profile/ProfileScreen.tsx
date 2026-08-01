@@ -203,7 +203,7 @@ export default function ProfileScreen({
       <View style={{ position: "absolute", left: s(95), top: t(116), width: s(200), height: s(200), borderRadius: s(100), backgroundColor: "#e47083" }} />
       <Image
         source={profilePhoto}
-        style={{ position: "absolute", left: s(99), top: t(120), width: s(192), height: s(192), borderRadius: s(96) }}
+        style={{ position: "absolute", left: s(89), top: t(120), width: s(210), height: s(210), borderRadius: s(96) }}
       />
       <TouchableOpacity
         activeOpacity={0.8}
@@ -211,7 +211,7 @@ export default function ProfileScreen({
         style={{
           position: "absolute",
           left: s(265),
-          top: t(286),
+          top: t(250),
           width: s(60),
           height: s(60),
           borderRadius: s(30),
