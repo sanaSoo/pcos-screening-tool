@@ -194,7 +194,7 @@ export default function TreatmentLogScreen({ onPressHome, onPressQuickCheckIn, o
         <InfoButton
           title="Why Log Treatments"
           message="Recording what you're using — and when — makes it possible to spot which treatments actually line up with changes in your symptoms, cycle, or skin over time."
-          style={{ position: "absolute", top: 14, right: 0 }}
+          style={{ position: "absolute", top: 14, right: 16 }}
         />
         <Text style={styles.title}>TREATMENT LOG</Text>
         <Text style={styles.subtitle}>what are you using?</Text>

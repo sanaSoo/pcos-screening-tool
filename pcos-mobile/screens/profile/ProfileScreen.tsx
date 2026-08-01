@@ -107,7 +107,10 @@ export default function ProfileScreen({
         <SvgXml xml={homeIconXml} width={s(28)} height={s(29)} color="#fff" />
       </TouchableOpacity>
 
-      <Text style={{ position: "absolute", left: s(112), top: t(60), width: s(251), fontSize: s(30), fontWeight: "800", color: "#000" }}>
+      <Text
+        numberOfLines={1}
+        style={{ position: "absolute", left: s(112), top: t(66), width: s(216), fontSize: s(23), fontWeight: "800", color: "#000" }}
+      >
         ALL ABOUT YOU!
       </Text>
 
@@ -118,24 +121,24 @@ export default function ProfileScreen({
       />
 
       {/* stats card */}
-      <View style={{ position: "absolute", left: s(32), top: t(260), width: s(326), height: s(304), borderRadius: s(15), backgroundColor: "#89b8c2" }} />
+      <View style={{ position: "absolute", left: s(32), top: t(230), width: s(326), height: s(264), borderRadius: s(15), backgroundColor: "#89b8c2" }} />
 
-      <View style={{ position: "absolute", left: s(46), top: t(279), width: s(22), height: s(22), borderRadius: s(11), backgroundColor: "#fff7e7", alignItems: "center", justifyContent: "center" }}>
+      <View style={{ position: "absolute", left: s(46), top: t(249), width: s(22), height: s(22), borderRadius: s(11), backgroundColor: "#fff7e7", alignItems: "center", justifyContent: "center" }}>
         <SvgXml xml={helpIconXml} width={s(16)} height={s(16)} color="#000" />
       </View>
 
-      <Text style={{ position: "absolute", left: s(64), top: t(390), width: s(260), fontSize: s(18), fontWeight: "800", color: "#000", lineHeight: s(24) }}>
+      <Text style={{ position: "absolute", left: s(64), top: t(319), width: s(260), fontSize: s(18), fontWeight: "800", color: "#000", lineHeight: s(24) }}>
         days tracking: {daysTracking ?? "XXX"}{"\n"}
         periods this year: <Text style={{ color: "#e47083" }}>{periodsThisYear ?? 0}</Text> (so far)
       </Text>
 
-      <Text style={{ position: "absolute", left: s(64), top: t(453), fontSize: s(18), fontWeight: "800", color: "#000" }}>
+      <Text style={{ position: "absolute", left: s(64), top: t(374), fontSize: s(18), fontWeight: "800", color: "#000" }}>
         current diagnosis:
       </Text>
       <TouchableOpacity
         activeOpacity={0.8}
         onPress={toggleMenu}
-        style={{ position: "absolute", left: s(228), top: t(453), width: s(115), height: s(24), borderRadius: s(15), backgroundColor: "#ffcc7d", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: s(6), zIndex: 21 }}
+        style={{ position: "absolute", left: s(228), top: t(374), width: s(115), height: s(24), borderRadius: s(15), backgroundColor: "#ffcc7d", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: s(6), zIndex: 21 }}
       >
         <Text style={{ fontSize: s(14), fontWeight: "800", color: "#000" }}>{selectedDiagnosis ?? "select"}</Text>
         <Animated.View style={{ transform: [{ rotate: menuAnim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "180deg"] }) }] }}>
@@ -154,7 +157,7 @@ export default function ProfileScreen({
             style={{
               position: "absolute",
               left: s(228),
-              top: t(453) + s(30),
+              top: t(374) + s(30),
               width: s(150),
               borderRadius: s(12),
               backgroundColor: "#fff7e7",
@@ -191,27 +194,27 @@ export default function ProfileScreen({
         </>
       )}
 
-      <Text style={{ position: "absolute", left: s(64), top: t(490), fontSize: s(18), fontWeight: "800", color: "#000", lineHeight: s(24) }}>
+      <Text style={{ position: "absolute", left: s(64), top: t(419), fontSize: s(18), fontWeight: "800", color: "#000", lineHeight: s(24) }}>
         weight: {weightLbs ?? "XX"} lbs{"\n"}
         age: {age ?? "XX"} y.o.
       </Text>
 
       {/* profile photo, ring, edit badge — floats above the card per the design */}
-      <View style={{ position: "absolute", left: s(70), top: t(116), width: s(249), height: s(249), borderRadius: s(124.5), backgroundColor: "#e47083" }} />
+      <View style={{ position: "absolute", left: s(95), top: t(116), width: s(200), height: s(200), borderRadius: s(100), backgroundColor: "#e47083" }} />
       <Image
         source={profilePhoto}
-        style={{ position: "absolute", left: s(74), top: t(120), width: s(241), height: s(241), borderRadius: s(120.5) }}
+        style={{ position: "absolute", left: s(99), top: t(120), width: s(192), height: s(192), borderRadius: s(96) }}
       />
       <TouchableOpacity
         activeOpacity={0.8}
         onPress={onPressEditPhoto}
         style={{
           position: "absolute",
-          left: s(250),
-          top: t(307),
-          width: s(70),
-          height: s(70),
-          borderRadius: s(35),
+          left: s(265),
+          top: t(286),
+          width: s(60),
+          height: s(60),
+          borderRadius: s(30),
           backgroundColor: "#ffcc7d",
           alignItems: "center",
           justifyContent: "center",
@@ -222,7 +225,7 @@ export default function ProfileScreen({
           elevation: 4,
         }}
       >
-        <SvgXml xml={pencilIconXml} width={s(30)} height={s(30)} />
+        <SvgXml xml={pencilIconXml} width={s(26)} height={s(26)} />
       </TouchableOpacity>
 
       <TouchableOpacity
@@ -249,27 +252,32 @@ export default function ProfileScreen({
         <Text style={{ fontSize: s(20), fontWeight: "800", color: "#ae0000" }}>sign out</Text>
       </TouchableOpacity>
 
-      {__DEV__ && onToggleDemoData && (
+      {(__DEV__ && (onToggleDemoData || onPressClearNonDemoData)) && (
         <View
-          style={{ position: "absolute", left: s(99), top: t(730), width: s(184), height: s(38), borderRadius: s(19), borderWidth: s(2), borderColor: "#89b8c2", flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: s(10) }}
+          style={{ position: "absolute", left: 80, top: t(505), width: s(200), flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
         >
-          <Text style={{ fontSize: s(13), fontWeight: "800", color: "#89b8c2" }}>demo data (dev)</Text>
-          <Switch
-            value={!!demoDataEnabled}
-            onValueChange={onToggleDemoData}
-            trackColor={{ false: "#d9d9d9", true: "#89b8c2" }}
-          />
-        </View>
-      )}
+          {onToggleDemoData && (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: s(4) }}>
+              <Text style={{ fontSize: s(13), fontWeight: "800", color: "#89b8c2", textDecorationLine: "underline" }}>
+                demo data
+              </Text>
+              <Switch
+                value={!!demoDataEnabled}
+                onValueChange={onToggleDemoData}
+                trackColor={{ false: "#d9d9d9", true: "#89b8c2" }}
+                style={{ transform: [{ scale: s(0.7) }] }}
+              />
+            </View>
+          )}
 
-      {__DEV__ && onPressClearNonDemoData && (
-        <TouchableOpacity
-          activeOpacity={0.8}
-          onPress={onPressClearNonDemoData}
-          style={{ position: "absolute", left: s(99), top: t(776), width: s(184), height: s(30), borderRadius: s(15), borderWidth: s(2), borderColor: "#ae0000", alignItems: "center", justifyContent: "center" }}
-        >
-          <Text style={{ fontSize: s(13), fontWeight: "800", color: "#ae0000" }}>clear real data (dev)</Text>
-        </TouchableOpacity>
+          {onPressClearNonDemoData && (
+            <TouchableOpacity activeOpacity={0.6} onPress={onPressClearNonDemoData}>
+              <Text style={{ fontSize: s(13), fontWeight: "800", color: "#ae0000", textDecorationLine: "underline" }}>
+                clear real data
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
       )}
     </ScrollView>
   );

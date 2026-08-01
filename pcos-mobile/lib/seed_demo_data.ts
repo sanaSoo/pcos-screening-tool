@@ -2,14 +2,15 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { addTreatment } from "./treatments_api";
 import { logPastCycle, toDateKey } from "./cycles_api";
-import { logHair } from "./hair_tracking_api";
+import { logHair, type HairSeverity } from "./hair_tracking_api";
 import type { SkinCaptureHistoryEntry, ZoneScore } from "./skin_tracking_api";
 
-// Dev-only helper — fills AsyncStorage with a plausible month of data for
-// someone showing classic PCOS signs: a long, prolonged, irregular cycle
-// history; a hormonal jawline-pattern acne flare that worsens over the
-// month; worsening hirsutism + scalp thinning; and a treatment titration
-// (spironolactone + metformin) responding to that worsening.
+// Dev-only helper — fills AsyncStorage with a plausible ~3 months of data
+// for someone showing classic PCOS signs: a long, prolonged, irregular
+// cycle history; a hormonal jawline-pattern acne flare that worsens over
+// that time; worsening hirsutism + scalp thinning; and a treatment
+// titration (an initial contraceptive trial, then spironolactone +
+// metformin) responding to that worsening.
 const CYCLES_KEY = "@pcos/cycles";
 const HAIR_LOGS_KEY = "@pcos/hairLogs";
 const TREATMENTS_KEY = "@pcos/treatments";
@@ -47,22 +48,43 @@ function zoneScore(level: number, confidence: number): ZoneScore {
   };
 }
 
-// One row per weekly capture, oldest -> newest, showing the classic PCOS
-// androgenic pattern (jawline/chin/neck worse than forehead/temples) and a
-// gradual flare over the month.
-const SKIN_WEEKS: Record<string, number>[] = [
-  { forehead: 0, chin: 1, jaw_left: 2, jaw_right: 2, left_cheek: 1, right_cheek: 1, left_temple: 0, right_temple: 0, neck_left: 1, neck_right: 1 },
-  { forehead: 0, chin: 2, jaw_left: 2, jaw_right: 2, left_cheek: 1, right_cheek: 1, left_temple: 0, right_temple: 0, neck_left: 1, neck_right: 1 },
-  { forehead: 1, chin: 2, jaw_left: 3, jaw_right: 3, left_cheek: 2, right_cheek: 2, left_temple: 0, right_temple: 1, neck_left: 2, neck_right: 2 },
-  { forehead: 1, chin: 3, jaw_left: 3, jaw_right: 3, left_cheek: 2, right_cheek: 2, left_temple: 1, right_temple: 1, neck_left: 2, neck_right: 2 },
-  { forehead: 1, chin: 3, jaw_left: 4, jaw_right: 4, left_cheek: 2, right_cheek: 2, left_temple: 1, right_temple: 1, neck_left: 2, neck_right: 2 },
-];
+// Weekly captures, oldest -> newest, spanning ~3 months (one per week) and
+// showing the classic PCOS androgenic pattern (jawline/chin/neck worse than
+// forehead/temples) with a gradual flare over that time. Each zone ramps
+// from a start level to an end level across the run rather than being
+// hand-typed per week, so the history length can grow independently of the
+// zone pattern.
+const SKIN_ZONE_LEVELS: Record<string, { start: number; end: number }> = {
+  forehead: { start: 0, end: 1 },
+  chin: { start: 1, end: 4 },
+  jaw_left: { start: 2, end: 4 },
+  jaw_right: { start: 2, end: 4 },
+  left_cheek: { start: 1, end: 2 },
+  right_cheek: { start: 1, end: 2 },
+  left_temple: { start: 0, end: 1 },
+  right_temple: { start: 0, end: 1 },
+  neck_left: { start: 1, end: 2 },
+  neck_right: { start: 1, end: 2 },
+};
+const SKIN_WEEKS_COUNT = 12;
+
+function buildSkinWeeks(weeks: number): Record<string, number>[] {
+  return Array.from({ length: weeks }, (_, i) => {
+    const t = weeks === 1 ? 1 : i / (weeks - 1);
+    const row: Record<string, number> = {};
+    for (const [zone, { start, end }] of Object.entries(SKIN_ZONE_LEVELS)) {
+      row[zone] = Math.min(4, Math.max(-1, Math.round(start + (end - start) * t)));
+    }
+    return row;
+  });
+}
+const SKIN_WEEKS = buildSkinWeeks(SKIN_WEEKS_COUNT);
 
 async function seedSkinCaptureHistory(now: Date): Promise<void> {
   const raw = await AsyncStorage.getItem(SKIN_HISTORY_KEY);
   const existing: SkinCaptureHistoryEntry[] = raw ? JSON.parse(raw) : [];
 
-  const offsets = [28, 21, 14, 7, 0];
+  const offsets = Array.from({ length: SKIN_WEEKS.length }, (_, i) => (SKIN_WEEKS.length - 1 - i) * 7);
   const entries: SkinCaptureHistoryEntry[] = SKIN_WEEKS.map((levels, i) => {
     const scores: Record<string, ZoneScore> = {};
     for (const [zone, level] of Object.entries(levels)) {
@@ -83,34 +105,67 @@ async function seedSkinCaptureHistory(now: Date): Promise<void> {
   await AsyncStorage.setItem(SKIN_HISTORY_KEY, JSON.stringify([...existing, ...entries]));
 }
 
-async function seedCycles(now: Date): Promise<void> {
-  // Long, prolonged, irregular cycles — a hallmark of PCOS (oligomenorrhea).
-  // Gaps of 28 then 62 days give high cycle-length variance, and 5-9 day
-  // periods are on the longer/heavier end.
-  const cycleC = { start: daysAgo(27, now), end: daysAgo(19, now) }; // 9-day period, within the last month
-  const cycleB = { start: daysAgo(27 + 62, now), end: daysAgo(27 + 62 - 5, now) }; // 6-day period
-  const cycleA = { start: daysAgo(27 + 62 + 28, now), end: daysAgo(27 + 62 + 28 - 4, now) }; // 5-day period
+// Long, prolonged, irregular cycles — a hallmark of PCOS (oligomenorrhea).
+// Gaps between starts vary a lot (34-62 days) to give high cycle-length
+// variance, and 4-9 day periods are on the longer/heavier end. Oldest ->
+// newest; the most recent cycle started 27 days ago, same as before.
+const CYCLE_GAPS = [45, 62, 34, 50]; // days between consecutive cycle starts
+const PERIOD_LENGTHS = [5, 6, 4, 9, 7]; // one per cycle, oldest -> newest
+const MOST_RECENT_CYCLE_START_OFFSET = 27;
 
-  await logPastCycle(cycleA.start, cycleA.end);
-  await logPastCycle(cycleB.start, cycleB.end);
-  await logPastCycle(cycleC.start, cycleC.end);
+async function seedCycles(now: Date): Promise<void> {
+  const startOffsets: number[] = [MOST_RECENT_CYCLE_START_OFFSET];
+  for (const gap of [...CYCLE_GAPS].reverse()) {
+    startOffsets.push(startOffsets[startOffsets.length - 1] + gap);
+  }
+  startOffsets.reverse(); // back to oldest -> newest
+
+  // Oldest first, so cycle ids/insertion order read chronologically.
+  for (let i = 0; i < startOffsets.length; i++) {
+    const start = daysAgo(startOffsets[i], now);
+    const end = daysAgo(startOffsets[i] - (PERIOD_LENGTHS[i] - 1), now);
+    await logPastCycle(start, end);
+  }
 }
 
+// Worsening hirsutism (excess growth) + scalp thinning across the run —
+// both androgen-driven PCOS symptoms.
+const HAIR_GROWTH_LEVELS = { start: 1, end: 3 };
+const HAIR_THINNING_LEVELS = { start: 0, end: 3 };
+const HAIR_WEEKS_COUNT = 12;
+
 async function seedHairLogs(now: Date): Promise<void> {
-  // Worsening hirsutism (excess growth) + scalp thinning over the month —
-  // both androgen-driven PCOS symptoms.
-  const offsets = [28, 21, 14, 7, 0];
-  const growth: [number, number, number, number, number] = [2, 2, 3, 3, 3];
-  const thinning: [number, number, number, number, number] = [1, 2, 2, 2, 3];
+  const offsets = Array.from({ length: HAIR_WEEKS_COUNT }, (_, i) => (HAIR_WEEKS_COUNT - 1 - i) * 7);
 
   for (let i = 0; i < offsets.length; i++) {
-    await logHair(growth[i] as 0 | 1 | 2 | 3, thinning[i] as 0 | 1 | 2 | 3, daysAgo(offsets[i], now));
+    const t = offsets.length === 1 ? 1 : i / (offsets.length - 1);
+    const growth = Math.round(HAIR_GROWTH_LEVELS.start + (HAIR_GROWTH_LEVELS.end - HAIR_GROWTH_LEVELS.start) * t);
+    const thinning = Math.round(
+      HAIR_THINNING_LEVELS.start + (HAIR_THINNING_LEVELS.end - HAIR_THINNING_LEVELS.start) * t,
+    );
+    await logHair(growth as HairSeverity, thinning as HairSeverity, daysAgo(offsets[i], now));
   }
 }
 
 async function seedTreatments(now: Date): Promise<void> {
-  // A titration story that tracks the worsening symptoms above: starting
-  // doses a month ago, stepped up mid-month once they weren't enough.
+  // A titration story that tracks the worsening symptoms above: a
+  // first-line contraceptive trial 3 months ago that got discontinued,
+  // then spironolactone + metformin starting a month ago and stepped up
+  // mid-month once they weren't enough.
+  await addTreatment({
+    name: "Combined Oral Contraceptive",
+    dosage: null,
+    date: daysAgo(90, now),
+    symptomTags: ["Cycle", "Acne"],
+    notes: "Trialed as first-line therapy for irregular cycles and acne.",
+  });
+  await addTreatment({
+    name: "Combined Oral Contraceptive",
+    dosage: null,
+    date: daysAgo(45, now),
+    symptomTags: ["Cycle"],
+    notes: "Discontinued — mood side effects. Switching approach.",
+  });
   await addTreatment({
     name: "Spironolactone",
     dosage: "50mg",

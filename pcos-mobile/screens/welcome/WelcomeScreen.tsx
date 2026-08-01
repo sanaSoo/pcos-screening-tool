@@ -39,7 +39,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   titleScript: {
-    fontStyle: "italic",
+    fontFamily: "Pacifico_400Regular",
     fontWeight: "400",
   },
   arrowButton: {

@@ -167,9 +167,10 @@ export default function CycleTrackingScreen({
         <InfoButton
           title="Why Track Your Cycle"
           message="Irregular periods are a hallmark of PCOS. Logging start and end dates helps you and your doctor understand your cycle length and regularity, which is key to diagnosis and treatment."
-          style={{ position: "absolute", top: 14, right: 0 }}
+          style={{ position: "absolute", top: 14, right: 16 }}
         />
         <Text style={styles.title}>CYCLE TRACKING</Text>
+        <Text style={styles.subtitle}>what&apos;s new this month?</Text>
 
         {openCycle ? (
           <View style={styles.statusCard}>
@@ -344,8 +345,9 @@ export default function CycleTrackingScreen({
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff7e7" },
   scroll: { flex: 1 },
-  content: { flexGrow: 1, padding: 16, paddingBottom: 40, alignItems: "center", justifyContent: "center" },
+  content: { padding: 16, paddingTop: 14, paddingBottom: 40, alignItems: "center" },
   title: { fontSize: 32, fontWeight: "800", color: "#000" },
+  subtitle: { fontSize: 15, fontWeight: "800", color: "#000", marginTop: 4 },
   statusCard: {
     width: "100%",
     backgroundColor: "#f49aa3",

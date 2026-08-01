@@ -1,3 +1,4 @@
+import { Pacifico_400Regular, useFonts } from "@expo-google-fonts/pacifico";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
@@ -56,6 +57,7 @@ export default function App() {
   // returning logged-in user should land straight on the Dashboard instead
   // of being bounced through Welcome/Login again.
   const [screen, setScreen] = useState<Screen | null>(null);
+  const [fontsLoaded] = useFonts({ Pacifico_400Regular });
   const [periodsThisYear, setPeriodsThisYear] = useState(0);
   const [demoDataEnabled, setDemoDataEnabledState] = useState(false);
   const goHome = () => setScreen("dashboard");
@@ -117,7 +119,7 @@ export default function App() {
     setScreen("login");
   }
 
-  if (screen === null) {
+  if (screen === null || !fontsLoaded) {
     return (
       <SafeAreaProvider>
         <View style={[styles.container, { backgroundColor: SCREEN_BACKGROUNDS.welcome }]} />

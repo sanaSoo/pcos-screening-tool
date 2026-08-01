@@ -78,8 +78,8 @@ const styles = StyleSheet.create({
   },
   plusPill: {
     bottom: 0,
-    width: 150,
-    height: 150,
+    width: 125,
+    height: 125,
     borderRadius: 75,
     backgroundColor: "#89b8c2",
     marginLeft: -26,
