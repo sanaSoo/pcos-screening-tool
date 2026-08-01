@@ -15,7 +15,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { SvgXml } from "react-native-svg";
 
 import { cameraRetakeXml, profileSilhouetteXml } from "../../assets/camera/icons";
+import InfoButton from "../../components/InfoButton";
 import NavigationBar from "../../components/NavigationBar";
+import { markTrackedThisWeek } from "../../lib/daily_tracking";
 import {
   SkinCaptureResponse,
   submitSkinCapture,
@@ -111,6 +113,7 @@ export default function CaptureScreen({ onPressHome, onPressQuickCheckIn, onPres
         front: nextCaptures[2]!,
       });
       setResults(data);
+      markTrackedThisWeek("acne");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Request failed");
     } finally {
@@ -135,6 +138,11 @@ export default function CaptureScreen({ onPressHome, onPressQuickCheckIn, onPres
     return (
       <SafeAreaView style={styles.screenWrapper}>
       <ScrollView contentContainerStyle={styles.resultsContainer}>
+        <InfoButton
+          title="Why Track Your Skin"
+          message="Hormonal acne is one of the most common PCOS symptoms. Photographing it over time makes it easier to see whether treatments are working and to catch flare-ups tied to your cycle."
+          style={{ position: "absolute", top: 40, right: 16 }}
+        />
         <Text style={styles.heading}>ACNE TRACKER</Text>
         <Text style={styles.overall}>
           Overall severity: {results.scores.overall}
@@ -209,6 +217,11 @@ export default function CaptureScreen({ onPressHome, onPressQuickCheckIn, onPres
   return (
     <SafeAreaView style={styles.screenWrapper}>
     <View style={styles.container}>
+      <InfoButton
+        title="Why Track Your Skin"
+        message="Hormonal acne is one of the most common PCOS symptoms. Photographing it over time makes it easier to see whether treatments are working and to catch flare-ups tied to your cycle."
+        style={{ position: "absolute", top: 40, right: 16, zIndex: 1 }}
+      />
       <Text style={styles.heading}>ACNE TRACKER</Text>
 
       <View style={styles.cameraFrame}>
@@ -343,6 +356,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: "center",
     marginTop: 16,
+    marginBottom: 40,
   },
   primaryButtonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
   homeLink: { marginTop: 16 },

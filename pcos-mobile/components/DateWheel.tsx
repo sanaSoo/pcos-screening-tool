@@ -108,7 +108,6 @@ const WheelItem = memo(function WheelItem({
   pillWidth,
   pillHeight,
 }: WheelItemProps) {
-  const isFaded = item.type === "day" && item.isWeekend && !item.isToday;
   const isActive = item.type === "day" && item.isToday;
 
   const inputRange = [
@@ -172,27 +171,15 @@ const WheelItem = memo(function WheelItem({
               height: pillHeight,
               borderRadius: pillWidth * 0.42,
               gap: pillHeight * 0.04,
-              backgroundColor: isActive ? "#e47083" : isFaded ? "rgba(244,154,163,0.54)" : "#f49aa3",
+              backgroundColor: isActive ? "#e47083" : "#f49aa3",
             },
             isActive && styles.pillActiveShadow,
           ]}
         >
-          <Text
-            style={{
-              fontSize: pillHeight * (isFaded ? 0.185 : 0.22),
-              fontWeight: "800",
-              color: isFaded ? "rgba(255,247,231,0.54)" : "#fff7e7",
-            }}
-          >
+          <Text style={{ fontSize: pillHeight * 0.22, fontWeight: "800", color: "#fff7e7" }}>
             {item.dayLetter}
           </Text>
-          <Text
-            style={{
-              fontSize: pillHeight * (isFaded ? 0.185 : 0.22),
-              fontWeight: "800",
-              color: isFaded ? "rgba(255,247,231,0.54)" : "#fff7e7",
-            }}
-          >
+          <Text style={{ fontSize: pillHeight * 0.22, fontWeight: "800", color: "#fff7e7" }}>
             {item.dayNum}
           </Text>
         </View>

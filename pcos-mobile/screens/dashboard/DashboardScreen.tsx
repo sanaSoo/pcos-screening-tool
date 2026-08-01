@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { SvgXml } from "react-native-svg";
+import { Path, SvgXml, Text as SvgText, TextPath, Svg } from "react-native-svg";
 import {
   Image,
   ScrollView,
@@ -22,13 +22,29 @@ import {
   weatherXml,
 } from "../../assets/dashboard/icons";
 import DateWheel from "../../components/DateWheel";
+import InfoButton from "../../components/InfoButton";
+import {
+  getMealsLoggedToday,
+  hasTrackedThisWeek,
+  logMeal,
+  MEALS_PER_DAY_COUNT,
+} from "../../lib/daily_tracking";
 
 const profilePhoto = require("../../assets/shared/profile-photo.png");
+
+function greetingForHour(hour: number) {
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
 
 function formatClock(date: Date) {
   let h = date.getHours() % 12;
   if (h === 0) h = 12;
-  return { hour: String(h), minute: String(date.getMinutes()).padStart(2, "0") };
+  return {
+    hour: String(h).padStart(2, "0"),
+    minute: String(date.getMinutes()).padStart(2, "0"),
+  };
 }
 
 // The dashboard is reproduced with the exact x/y/width/height from the Figma
@@ -62,6 +78,7 @@ type Props = {
   onPressAnalytics?: () => void;
   onSelectDate?: (date: Date) => void;
   onPressProfile?: () => void;
+  onPressNotes?: () => void;
 };
 
 export default function DashboardScreen({
@@ -73,6 +90,7 @@ export default function DashboardScreen({
   onPressAnalytics,
   onSelectDate,
   onPressProfile,
+  onPressNotes,
 }: Props) {
   const { width: screenWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -94,6 +112,23 @@ export default function DashboardScreen({
     return () => clearInterval(id);
   }, []);
   const { hour, minute } = formatClock(now);
+
+  // Both start "true" (no dot) until loaded, so there's no flash of a dot
+  // that's about to disappear a moment later.
+  const [acneTrackedThisWeek, setAcneTrackedThisWeek] = useState(true);
+  const [hairSkinTrackedThisWeek, setHairSkinTrackedThisWeek] = useState(true);
+  const [mealsLoggedToday, setMealsLoggedToday] = useState(MEALS_PER_DAY_COUNT);
+  useEffect(() => {
+    hasTrackedThisWeek("acne").then(setAcneTrackedThisWeek);
+    hasTrackedThisWeek("hairSkin").then(setHairSkinTrackedThisWeek);
+    getMealsLoggedToday().then(setMealsLoggedToday);
+  }, []);
+  const symptomDotsRemaining = (acneTrackedThisWeek ? 0 : 1) + (hairSkinTrackedThisWeek ? 0 : 1);
+
+  function handlePressMealTracker() {
+    logMeal().then(setMealsLoggedToday);
+    onPressMealTracker?.();
+  }
 
   return (
     <ScrollView
@@ -139,7 +174,7 @@ export default function DashboardScreen({
           color: "#000",
         }}
       >
-        Good morning {userName}!
+        {greetingForHour(now.getHours())} {userName}!
       </Text>
       <View style={{ position: "absolute", left: s(262), top: t(150), width: s(90), alignItems: "center" }}>
         <Text numberOfLines={1} style={{ fontSize: s(44), fontWeight: "800", color: "#000", lineHeight: s(48) }}>
@@ -154,7 +189,11 @@ export default function DashboardScreen({
       </View>
 
       {/* notes ribbon */}
-      <View pointerEvents="none" style={{ position: "absolute", left: s(260), top: s(1), width: s(95), alignItems: "center" }}>
+      <TouchableOpacity
+        activeOpacity={0.8}
+        onPress={onPressNotes}
+        style={{ position: "absolute", left: s(260), top: s(1), width: s(95), alignItems: "center" }}
+      >
         <View style={{ position: "absolute" }}>
           <SvgXml xml={doodleSquiggleXml} width={s(96.85)} height={s(171.6)} />
         </View>
@@ -173,28 +212,31 @@ export default function DashboardScreen({
         >
           NOTES{"\n"}NOTES{"\n"}NOTES
         </Text>
-      </View>
+      </TouchableOpacity>
 
       {/* days of the week */}
       <View style={{ position: "absolute", left: s(36), top: t(319), width: s(318), height: s(92) }}>
         <DateWheel onSelectDate={onSelectDate} />
       </View>
 
-      {/* whats up today */}
-      <Text
-        style={{
-          position: "absolute",
-          left: 0,
-          top: t(440),
-          width: screenWidth,
-          fontSize: s(26),
-          fontStyle: "italic",
-          color: "#000",
-          textAlign: "center",
-        }}
+      {/* whats up today — curved along an arc, matching the text-path in the
+          Figma source rather than a straight line */}
+      <Svg
+        width={screenWidth}
+        height={s(80)}
+        style={{ position: "absolute", left: 0, top: t(430) }}
       >
-        Whats up today?
-      </Text>
+        <Path
+          id="whatsUpArc"
+          d={`M ${s(20)} ${s(60)} Q ${screenWidth / 2} ${s(-10)} ${screenWidth - s(20)} ${s(60)}`}
+          fill="none"
+        />
+        <SvgText fill="#000" fontSize={s(32)} fontStyle="italic" textAnchor="middle">
+          <TextPath href="#whatsUpArc" startOffset="50%">
+            Whats up today?
+          </TextPath>
+        </SvgText>
+      </Svg>
 
       {/* sprout (renders before the cards so the card colors mask the overlap, reading as growing up from behind them) */}
       <SvgXml
@@ -211,23 +253,41 @@ export default function DashboardScreen({
         onPress={onPressSymptomCheckIn}
         style={{ position: "absolute", left: s(28), top: t(509), width: s(100), height: s(138), borderRadius: s(10), backgroundColor: "#ffcc7d" }}
       />
-      <Text style={{ position: "absolute", left: s(23), top: t(528), width: s(109), fontSize: s(14), fontWeight: "800", color: "#fff7e7", textAlign: "center" }}>
+      <Text style={{ position: "absolute", left: s(23), top: t(536), width: s(109), fontSize: s(14), fontWeight: "800", color: "#fff7e7", textAlign: "center" }}>
         Symptom{"\n"}Check-In
       </Text>
       <View style={{ position: "absolute", left: s(52), top: t(573) }} pointerEvents="none">
         <SvgXml xml={sealCheckXml} width={s(48)} height={s(48)} color="#fff7e7" />
       </View>
+      {/* one dot per sub-tracker (acne, hair/skin) not yet submitted this week */}
+      <View
+        pointerEvents="none"
+        style={{ position: "absolute", left: s(28 + 100 - 32), top: t(509 + 10), flexDirection: "row", gap: s(4) }}
+      >
+        {Array.from({ length: symptomDotsRemaining }).map((_, i) => (
+          <View key={i} style={{ width: s(10), height: s(10), borderRadius: s(5), backgroundColor: "#fff7e7" }} />
+        ))}
+      </View>
 
       <TouchableOpacity
         activeOpacity={0.8}
-        onPress={onPressMealTracker}
+        onPress={handlePressMealTracker}
         style={{ position: "absolute", left: s(145), top: t(509), width: s(100), height: s(138), borderRadius: s(10), backgroundColor: "#a8bf89" }}
       />
-      <Text style={{ position: "absolute", left: s(140), top: t(528), width: s(109), fontSize: s(14), fontWeight: "800", color: "#fff7e7", textAlign: "center" }}>
+      <Text style={{ position: "absolute", left: s(140), top: t(536), width: s(109), fontSize: s(14), fontWeight: "800", color: "#fff7e7", textAlign: "center" }}>
         Meal{"\n"}Tracker
       </Text>
       <View style={{ position: "absolute", left: s(171), top: t(573) }} pointerEvents="none">
         <SvgXml xml={mealieXml} width={s(48)} height={s(48)} color="#fff7e7" />
+      </View>
+      {/* one dot per meal not yet logged today — taps one meal off with each press */}
+      <View
+        pointerEvents="none"
+        style={{ position: "absolute", left: s(145 + 100 - 42), top: t(509 + 10), flexDirection: "row", gap: s(4) }}
+      >
+        {Array.from({ length: Math.max(0, MEALS_PER_DAY_COUNT - mealsLoggedToday) }).map((_, i) => (
+          <View key={i} style={{ width: s(8), height: s(8), borderRadius: s(4), backgroundColor: "#fff7e7" }} />
+        ))}
       </View>
 
       <TouchableOpacity
@@ -235,7 +295,7 @@ export default function DashboardScreen({
         onPress={onPressCycleTracking}
         style={{ position: "absolute", left: s(262), top: t(509), width: s(100), height: s(138), borderRadius: s(10), backgroundColor: "#e47083" }}
       />
-      <Text style={{ position: "absolute", left: s(257), top: t(528), width: s(109), fontSize: s(14), fontWeight: "800", color: "#fff7e7", textAlign: "center" }}>
+      <Text style={{ position: "absolute", left: s(257), top: t(536), width: s(109), fontSize: s(14), fontWeight: "800", color: "#fff7e7", textAlign: "center" }}>
         Cycle{"\n"}Tracking
       </Text>
       <View style={{ position: "absolute", left: s(288), top: t(573) }} pointerEvents="none">
@@ -257,6 +317,13 @@ export default function DashboardScreen({
         documenting your journey for{" "}
         <Text style={{ color: "#e47083" }}>{daysTracking || "XX"}</Text> days!
       </Text>
+
+      <InfoButton
+        title="Why Track?"
+        message="Consistent tracking helps you and your care team spot patterns in your cycle, skin, and symptoms over time — small day-to-day changes can reveal a lot about how PCOS is affecting your body."
+        style={{ position: "absolute", left: s(340), top: t(750) }}
+        backgroundColor="rgba(0,0,0,0.08)"
+      />
     </ScrollView>
   );
 }

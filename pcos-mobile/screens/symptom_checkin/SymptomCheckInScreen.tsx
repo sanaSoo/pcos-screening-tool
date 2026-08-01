@@ -3,6 +3,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { SvgXml } from "react-native-svg";
 
 import { faceIdXml, hairSkinXml, trendUpXml } from "../../assets/symptom_checkin/icons";
+import InfoButton from "../../components/InfoButton";
 import NavigationBar from "../../components/NavigationBar";
 
 type Props = {
@@ -23,6 +24,11 @@ export default function SymptomCheckInScreen({
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+        <InfoButton
+          title="Why Symptom Tracking Matters"
+          message="PCOS symptoms can fluctuate with your cycle and hormones. Logging them regularly helps you notice patterns and gives you concrete details to share with your doctor, instead of relying on memory."
+          style={{ position: "absolute", top: 14, right: 16 }}
+        />
         <Text style={styles.title}>CHECK - iN</Text>
         <Text style={styles.subtitle}>what&apos;s new with you?</Text>
 

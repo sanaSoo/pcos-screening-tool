@@ -19,8 +19,6 @@ export default function NavigationBar({
 }: Props) {
   return (
     <View style={styles.bar}>
-      <View style={styles.strip} />
-
       <View style={styles.row}>
         <TouchableOpacity
           style={[styles.pill, styles.homePill]}
@@ -55,24 +53,11 @@ const styles = StyleSheet.create({
     height: 112,
     justifyContent: "center",
   },
-  strip: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: "75%",
-    height: 70,
-    marginTop: -5,
-    backgroundColor: "#ffcc7d",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 3,
-  },
   row: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
+    marginTop: 20,
   },
   pill: {
     alignItems: "center",
