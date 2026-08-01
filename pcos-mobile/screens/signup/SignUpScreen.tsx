@@ -37,7 +37,6 @@ export default function SignUpScreen({ onSignedUp, onPressLogIn }: Props) {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [pendingConfirmation, setPendingConfirmation] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   function clearError() {
@@ -64,7 +63,7 @@ export default function SignUpScreen({ onSignedUp, onPressLogIn }: Props) {
       if (session) {
         onSignedUp?.();
       } else {
-        setPendingConfirmation(true);
+        setError("Sign up succeeded but no session was returned — check the Supabase project's email confirmation setting.");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign up failed.");
@@ -142,16 +141,10 @@ export default function SignUpScreen({ onSignedUp, onPressLogIn }: Props) {
         </Text>
       </TouchableOpacity>
 
-      {pendingConfirmation ? (
-        <Text style={{ position: "absolute", left: s(30), top: t(524), width: s(330), fontSize: s(12), fontWeight: "700", color: "#000", textAlign: "center" }}>
-          Check your email to confirm your account, then log in.
+      {error && (
+        <Text style={{ position: "absolute", left: s(30), top: t(524), width: s(330), fontSize: s(12), fontWeight: "700", color: "#7a1f2b", textAlign: "center" }}>
+          {error}
         </Text>
-      ) : (
-        error && (
-          <Text style={{ position: "absolute", left: s(30), top: t(524), width: s(330), fontSize: s(12), fontWeight: "700", color: "#7a1f2b", textAlign: "center" }}>
-            {error}
-          </Text>
-        )
       )}
 
       <TouchableOpacity

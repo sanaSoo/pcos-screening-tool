@@ -323,7 +323,7 @@ const styles = StyleSheet.create({
   formButtonRow: { flexDirection: "row", gap: 12, marginTop: 4 },
   formCancelButton: {
     flex: 1,
-    borderRadius: 20,
+    borderRadius: 10,
     borderWidth: 2,
     borderColor: "#89b8c2",
     paddingVertical: 12,
@@ -332,7 +332,7 @@ const styles = StyleSheet.create({
   formCancelText: { fontSize: 15, fontWeight: "800", color: "#89b8c2" },
   formSaveButton: {
     flex: 1,
-    borderRadius: 20,
+    borderRadius: 10,
     backgroundColor: "#e47083",
     paddingVertical: 12,
     alignItems: "center",

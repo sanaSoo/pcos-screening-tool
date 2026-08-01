@@ -168,10 +168,10 @@ export default function DashboardScreen({
         style={{
           position: "absolute",
           left: s(33),
-          top: t(134),
+          top: t(148),
           width: s(254),
-          fontSize: s(48),
-          lineHeight: s(58),
+          fontSize: s(46),
+          lineHeight: s(55),
           fontWeight: "800",
           color: "#000",
         }}
@@ -194,22 +194,22 @@ export default function DashboardScreen({
       <TouchableOpacity
         activeOpacity={0.8}
         onPress={onPressNotes}
-        style={{ position: "absolute", left: s(260), top: s(1), width: s(95), alignItems: "center" }}
+        style={{ position: "absolute", left: s(268), top: s(24), width: s(76), alignItems: "center" }}
       >
         <View style={{ position: "absolute" }}>
-          <SvgXml xml={doodleSquiggleXml} width={s(96.85)} height={s(171.6)} />
+          <SvgXml xml={doodleSquiggleXml} width={s(77.5)} height={s(137.3)} />
         </View>
         <View style={{ position: "absolute" }}>
-          <SvgXml xml={bookmarkOutlineXml} width={s(96.85)} height={s(171.6)} />
+          <SvgXml xml={bookmarkOutlineXml} width={s(77.5)} height={s(137.3)} />
         </View>
         <Text
           style={{
-            marginTop: s(29),
-            fontSize: s(23),
+            marginTop: s(23),
+            fontSize: s(18),
             fontWeight: "800",
             color: "#89b8c2",
             textAlign: "center",
-            lineHeight: s(26),
+            lineHeight: s(21),
           }}
         >
           NOTES{"\n"}NOTES{"\n"}NOTES

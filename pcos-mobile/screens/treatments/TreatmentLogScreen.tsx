@@ -16,6 +16,7 @@ import { pillIconXml } from "../../assets/treatments/icons";
 import InfoButton from "../../components/InfoButton";
 import MiniCalendar from "../../components/MiniCalendar";
 import NavigationBar from "../../components/NavigationBar";
+import TreatmentTimeline from "../../components/TreatmentTimeline";
 import {
   addTreatment,
   deleteTreatment,
@@ -64,6 +65,12 @@ export default function TreatmentLogScreen({ onPressHome, onPressQuickCheckIn, o
   const [menuTreatmentId, setMenuTreatmentId] = useState<string | null>(null);
   const menuTreatment = treatments.find((t) => t.id === menuTreatmentId) ?? null;
 
+  // Set when a timeline dot is tapped — shows just that date's treatments so
+  // the user doesn't have to hunt through the full log to answer "what did I
+  // try around then?"
+  const [dayDetailDate, setDayDetailDate] = useState<string | null>(null);
+  const dayDetailTreatments = treatments.filter((t) => t.date === dayDetailDate);
+
   useEffect(() => {
     listTreatments()
       .then(setTreatments)
@@ -96,6 +103,7 @@ export default function TreatmentLogScreen({ onPressHome, onPressQuickCheckIn, o
     setShowDatePicker(false);
     setShowForm(true);
     setMenuTreatmentId(null);
+    setDayDetailDate(null);
   }
 
   function closeForm() {
@@ -141,6 +149,11 @@ export default function TreatmentLogScreen({ onPressHome, onPressQuickCheckIn, o
     await deleteTreatment(id);
     setTreatments((prev) => prev.filter((t) => t.id !== id));
   }
+
+  useEffect(() => {
+    // Deleting the last treatment on a date shouldn't leave an empty modal open.
+    if (dayDetailDate && dayDetailTreatments.length === 0) setDayDetailDate(null);
+  }, [dayDetailDate, dayDetailTreatments.length]);
 
   function renderTreatment(treatment: Treatment) {
     return (
@@ -196,7 +209,13 @@ export default function TreatmentLogScreen({ onPressHome, onPressQuickCheckIn, o
         ) : ordered.length === 0 ? (
           <Text style={styles.emptyText}>No treatments logged yet.</Text>
         ) : (
-          ordered.map(renderTreatment)
+          <>
+            <TreatmentTimeline
+              treatments={treatments}
+              onSelectDate={(group) => setDayDetailDate(group.date)}
+            />
+            {ordered.map(renderTreatment)}
+          </>
         )}
       </ScrollView>
 
@@ -337,6 +356,33 @@ export default function TreatmentLogScreen({ onPressHome, onPressQuickCheckIn, o
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      <Modal
+        visible={dayDetailDate !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDayDetailDate(null)}
+      >
+        <TouchableOpacity
+          style={styles.formOverlay}
+          activeOpacity={1}
+          onPress={() => setDayDetailDate(null)}
+        >
+          <TouchableOpacity activeOpacity={1} style={styles.formCard} onPress={() => {}}>
+            <Text style={styles.formTitle}>{dayDetailDate ? formatShort(dayDetailDate) : ""}</Text>
+            <ScrollView contentContainerStyle={{ gap: 12, paddingTop: 4 }}>
+              {dayDetailTreatments.map(renderTreatment)}
+            </ScrollView>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => setDayDetailDate(null)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.formCancelText}>Close</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -352,7 +398,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     backgroundColor: "#f49aa3",
-    borderRadius: 16,
+    borderRadius: 10,
     paddingVertical: 12,
     paddingHorizontal: 24,
     marginTop: 20,
@@ -416,7 +462,7 @@ const styles = StyleSheet.create({
   dateFieldValue: { fontSize: 16, fontWeight: "800", color: "#fff7e7", marginTop: 2 },
   tagPickerRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   tagOption: {
-    borderRadius: 14,
+    borderRadius: 8,
     borderWidth: 2,
     borderColor: "#89b8c2",
     paddingVertical: 6,
@@ -429,7 +475,7 @@ const styles = StyleSheet.create({
   formButtonRow: { flexDirection: "row", gap: 12, marginTop: 4 },
   formCancelButton: {
     flex: 1,
-    borderRadius: 20,
+    borderRadius: 10,
     borderWidth: 2,
     borderColor: "#89b8c2",
     paddingVertical: 12,
@@ -438,7 +484,7 @@ const styles = StyleSheet.create({
   formCancelText: { fontSize: 15, fontWeight: "800", color: "#89b8c2" },
   backButton: {
     alignSelf: "center",
-    borderRadius: 20,
+    borderRadius: 10,
     borderWidth: 2,
     borderColor: "#89b8c2",
     paddingVertical: 10,
@@ -447,7 +493,7 @@ const styles = StyleSheet.create({
   },
   formSaveButton: {
     flex: 1,
-    borderRadius: 20,
+    borderRadius: 10,
     backgroundColor: "#e47083",
     paddingVertical: 12,
     alignItems: "center",

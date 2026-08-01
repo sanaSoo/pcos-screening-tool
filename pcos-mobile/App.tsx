@@ -5,7 +5,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { getSession, signOut } from "./lib/auth";
 import { listCycles } from "./lib/cycles_api";
-import { seedPcosDemoData } from "./lib/seed_demo_data";
+import { clearNonDemoData, isDemoDataEnabled, setDemoDataEnabled } from "./lib/seed_demo_data";
 import AnalyticsScreen from "./screens/analytics/AnalyticsScreen";
 import CycleTrackingScreen from "./screens/cycles/CycleTrackingScreen";
 import DashboardScreen from "./screens/dashboard/DashboardScreen";
@@ -57,6 +57,7 @@ export default function App() {
   // of being bounced through Welcome/Login again.
   const [screen, setScreen] = useState<Screen | null>(null);
   const [periodsThisYear, setPeriodsThisYear] = useState(0);
+  const [demoDataEnabled, setDemoDataEnabledState] = useState(false);
   const goHome = () => setScreen("dashboard");
   const goProfile = () => setScreen("profile");
 
@@ -73,17 +74,36 @@ export default function App() {
       const count = cycles.filter((c) => Number(c.startDate.slice(0, 4)) === currentYear).length;
       setPeriodsThisYear(count);
     });
+    isDemoDataEnabled().then(setDemoDataEnabledState);
   }, [screen]);
 
-  async function handleSeedDemoData() {
+  async function handleToggleDemoData(enabled: boolean) {
     try {
-      await seedPcosDemoData();
+      await setDemoDataEnabled(enabled);
+      setDemoDataEnabledState(enabled);
       const cycles = await listCycles();
       const currentYear = new Date().getFullYear();
       setPeriodsThisYear(cycles.filter((c) => Number(c.startDate.slice(0, 4)) === currentYear).length);
-      Alert.alert("Demo data loaded", "A month of sample PCOS-consistent data was added. Check Cycle Tracking, Symptom Check-In, and Analytics.");
+      Alert.alert(
+        enabled ? "Demo data loaded" : "Demo data cleared",
+        enabled
+          ? "A month of sample PCOS-consistent data was added. Check Cycle Tracking, Symptom Check-In, and Analytics."
+          : "Demo data was removed and your previous data (if any) was restored.",
+      );
     } catch (err) {
-      Alert.alert("Seed failed", err instanceof Error ? err.message : "Something went wrong.");
+      Alert.alert("Demo data toggle failed", err instanceof Error ? err.message : "Something went wrong.");
+    }
+  }
+
+  async function handleClearNonDemoData() {
+    try {
+      await clearNonDemoData();
+      const cycles = await listCycles();
+      const currentYear = new Date().getFullYear();
+      setPeriodsThisYear(cycles.filter((c) => Number(c.startDate.slice(0, 4)) === currentYear).length);
+      Alert.alert("Real data cleared", "Everything except demo data (if any) has been removed.");
+    } catch (err) {
+      Alert.alert("Clear failed", err instanceof Error ? err.message : "Something went wrong.");
     }
   }
 
@@ -171,7 +191,9 @@ export default function App() {
             onPressChatWithUs={comingSoon("Chat")}
             onPressPrivacy={comingSoon("Privacy settings")}
             onPressSignOut={handleSignOut}
-            onPressSeedDemoData={handleSeedDemoData}
+            demoDataEnabled={demoDataEnabled}
+            onToggleDemoData={handleToggleDemoData}
+            onPressClearNonDemoData={handleClearNonDemoData}
           />
         )}
         {screen === "cycleTracking" && (

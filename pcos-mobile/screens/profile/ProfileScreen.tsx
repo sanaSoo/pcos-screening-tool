@@ -5,6 +5,7 @@ import {
   Image,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TouchableOpacity,
   useWindowDimensions,
@@ -36,7 +37,9 @@ type Props = {
   onPressChatWithUs?: () => void;
   onPressPrivacy?: () => void;
   onPressSignOut?: () => void;
-  onPressSeedDemoData?: () => void;
+  demoDataEnabled?: boolean;
+  onToggleDemoData?: (enabled: boolean) => void;
+  onPressClearNonDemoData?: () => void;
 };
 
 export default function ProfileScreen({
@@ -51,7 +54,9 @@ export default function ProfileScreen({
   onPressChatWithUs,
   onPressPrivacy,
   onPressSignOut,
-  onPressSeedDemoData,
+  demoDataEnabled,
+  onToggleDemoData,
+  onPressClearNonDemoData,
 }: Props) {
   const { width: screenWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -92,7 +97,7 @@ export default function ProfileScreen({
   return (
     <ScrollView
       style={styles.screenWrapper}
-      contentContainerStyle={{ width: screenWidth, height: insets.top + s(780) - LIFT + insets.bottom, paddingBottom: insets.bottom }}
+      contentContainerStyle={{ width: screenWidth, height: insets.top + s(828) - LIFT + insets.bottom, paddingBottom: insets.bottom }}
     >
       <TouchableOpacity
         activeOpacity={0.8}
@@ -244,13 +249,26 @@ export default function ProfileScreen({
         <Text style={{ fontSize: s(20), fontWeight: "800", color: "#ae0000" }}>sign out</Text>
       </TouchableOpacity>
 
-      {__DEV__ && onPressSeedDemoData && (
+      {__DEV__ && onToggleDemoData && (
+        <View
+          style={{ position: "absolute", left: s(99), top: t(730), width: s(184), height: s(38), borderRadius: s(19), borderWidth: s(2), borderColor: "#89b8c2", flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: s(10) }}
+        >
+          <Text style={{ fontSize: s(13), fontWeight: "800", color: "#89b8c2" }}>demo data (dev)</Text>
+          <Switch
+            value={!!demoDataEnabled}
+            onValueChange={onToggleDemoData}
+            trackColor={{ false: "#d9d9d9", true: "#89b8c2" }}
+          />
+        </View>
+      )}
+
+      {__DEV__ && onPressClearNonDemoData && (
         <TouchableOpacity
           activeOpacity={0.8}
-          onPress={onPressSeedDemoData}
-          style={{ position: "absolute", left: s(99), top: t(734), width: s(184), height: s(30), borderRadius: s(15), borderWidth: s(2), borderColor: "#89b8c2", alignItems: "center", justifyContent: "center" }}
+          onPress={onPressClearNonDemoData}
+          style={{ position: "absolute", left: s(99), top: t(776), width: s(184), height: s(30), borderRadius: s(15), borderWidth: s(2), borderColor: "#ae0000", alignItems: "center", justifyContent: "center" }}
         >
-          <Text style={{ fontSize: s(13), fontWeight: "800", color: "#89b8c2" }}>seed demo data (dev)</Text>
+          <Text style={{ fontSize: s(13), fontWeight: "800", color: "#ae0000" }}>clear real data (dev)</Text>
         </TouchableOpacity>
       )}
     </ScrollView>

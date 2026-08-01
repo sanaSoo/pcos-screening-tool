@@ -69,7 +69,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   homePill: {
-    left: 15,
+    left: 10,
     width: 100,
     height: 100,
     borderRadius: 50,
@@ -88,7 +88,7 @@ const styles = StyleSheet.create({
   },
   plusImage: { width: 66, height: 66 },
   profilePill: {
-    right: 15,
+    right: 10,
     width: 100,
     height: 100,
     borderRadius: 50,

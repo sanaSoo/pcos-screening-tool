@@ -358,7 +358,7 @@ const styles = StyleSheet.create({
   statusText: { fontSize: 16, fontWeight: "800", color: "#000", textAlign: "center" },
   actionButton: {
     backgroundColor: "#e47083",
-    borderRadius: 20,
+    borderRadius: 10,
     paddingVertical: 14,
     paddingHorizontal: 28,
     alignItems: "center",
@@ -368,7 +368,7 @@ const styles = StyleSheet.create({
   error: { color: "#7a1f2b", fontWeight: "700", fontSize: 13, marginTop: 10, textAlign: "center" },
   secondaryLink: {
     backgroundColor: "#89b8c2",
-    borderRadius: 16,
+    borderRadius: 10,
     paddingVertical: 10,
     paddingHorizontal: 20,
     marginTop: 10,
@@ -426,7 +426,7 @@ const styles = StyleSheet.create({
   formButtonRow: { flexDirection: "row", gap: 12, marginTop: 8 },
   formCancelButton: {
     flex: 1,
-    borderRadius: 20,
+    borderRadius: 10,
     borderWidth: 2,
     borderColor: "#89b8c2",
     paddingVertical: 12,
@@ -435,7 +435,7 @@ const styles = StyleSheet.create({
   formCancelText: { fontSize: 15, fontWeight: "800", color: "#89b8c2" },
   backButton: {
     alignSelf: "center",
-    borderRadius: 20,
+    borderRadius: 10,
     borderWidth: 2,
     borderColor: "#89b8c2",
     paddingVertical: 10,
@@ -444,7 +444,7 @@ const styles = StyleSheet.create({
   },
   formSaveButton: {
     flex: 1,
-    borderRadius: 20,
+    borderRadius: 10,
     backgroundColor: "#e47083",
     paddingVertical: 12,
     alignItems: "center",
