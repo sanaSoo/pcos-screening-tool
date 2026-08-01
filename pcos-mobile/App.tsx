@@ -5,6 +5,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { getSession, signOut } from "./lib/auth";
 import { listCycles } from "./lib/cycles_api";
+import { seedPcosDemoData } from "./lib/seed_demo_data";
 import AnalyticsScreen from "./screens/analytics/AnalyticsScreen";
 import CycleTrackingScreen from "./screens/cycles/CycleTrackingScreen";
 import DashboardScreen from "./screens/dashboard/DashboardScreen";
@@ -73,6 +74,18 @@ export default function App() {
       setPeriodsThisYear(count);
     });
   }, [screen]);
+
+  async function handleSeedDemoData() {
+    try {
+      await seedPcosDemoData();
+      const cycles = await listCycles();
+      const currentYear = new Date().getFullYear();
+      setPeriodsThisYear(cycles.filter((c) => Number(c.startDate.slice(0, 4)) === currentYear).length);
+      Alert.alert("Demo data loaded", "A month of sample PCOS-consistent data was added. Check Cycle Tracking, Symptom Check-In, and Analytics.");
+    } catch (err) {
+      Alert.alert("Seed failed", err instanceof Error ? err.message : "Something went wrong.");
+    }
+  }
 
   async function handleSignOut() {
     try {
@@ -158,6 +171,7 @@ export default function App() {
             onPressChatWithUs={comingSoon("Chat")}
             onPressPrivacy={comingSoon("Privacy settings")}
             onPressSignOut={handleSignOut}
+            onPressSeedDemoData={handleSeedDemoData}
           />
         )}
         {screen === "cycleTracking" && (

@@ -36,6 +36,7 @@ type Props = {
   onPressChatWithUs?: () => void;
   onPressPrivacy?: () => void;
   onPressSignOut?: () => void;
+  onPressSeedDemoData?: () => void;
 };
 
 export default function ProfileScreen({
@@ -50,6 +51,7 @@ export default function ProfileScreen({
   onPressChatWithUs,
   onPressPrivacy,
   onPressSignOut,
+  onPressSeedDemoData,
 }: Props) {
   const { width: screenWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -241,6 +243,16 @@ export default function ProfileScreen({
       >
         <Text style={{ fontSize: s(20), fontWeight: "800", color: "#ae0000" }}>sign out</Text>
       </TouchableOpacity>
+
+      {__DEV__ && onPressSeedDemoData && (
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={onPressSeedDemoData}
+          style={{ position: "absolute", left: s(99), top: t(734), width: s(184), height: s(30), borderRadius: s(15), borderWidth: s(2), borderColor: "#89b8c2", alignItems: "center", justifyContent: "center" }}
+        >
+          <Text style={{ fontSize: s(13), fontWeight: "800", color: "#89b8c2" }}>seed demo data (dev)</Text>
+        </TouchableOpacity>
+      )}
     </ScrollView>
   );
 }
