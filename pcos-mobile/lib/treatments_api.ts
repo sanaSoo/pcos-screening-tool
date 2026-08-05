@@ -20,6 +20,8 @@ export type Treatment = {
   symptomTags: SymptomTag[];
   notes: string | null;
   createdAt: number;
+  endDate: string | null; // "YYYY-MM-DD", set once the treatment is ended
+  endReason: string | null;
 };
 
 export type TreatmentInput = {
@@ -62,6 +64,8 @@ export async function addTreatment(input: TreatmentInput): Promise<Treatment> {
     symptomTags: input.symptomTags,
     notes: input.notes,
     createdAt: Date.now(),
+    endDate: null,
+    endReason: null,
   };
   await writeAll([treatment, ...treatments]);
   return treatment;
@@ -78,6 +82,19 @@ export async function updateTreatment(id: string, input: TreatmentInput): Promis
     date: toDateKey(input.date),
     symptomTags: input.symptomTags,
     notes: input.notes,
+  };
+  await writeAll(treatments.map((t) => (t.id === id ? updated : t)));
+  return updated;
+}
+
+export async function endTreatment(id: string, endDate: Date, reason: string): Promise<Treatment> {
+  const treatments = await readAll();
+  const target = treatments.find((t) => t.id === id);
+  if (!target) throw new Error("Treatment not found.");
+  const updated: Treatment = {
+    ...target,
+    endDate: toDateKey(endDate),
+    endReason: reason,
   };
   await writeAll(treatments.map((t) => (t.id === id ? updated : t)));
   return updated;

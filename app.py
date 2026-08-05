@@ -1,10 +1,14 @@
-import base64
-import io
+import os
 import tempfile
+from datetime import datetime, timezone
+from functools import wraps
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, g, jsonify, request
 from werkzeug.exceptions import HTTPException
+from werkzeug.utils import secure_filename
 
+import supabase_client
+from analysis import hormonal_signal
 from skin_tracking import severity, zones
 
 app = Flask(__name__)
@@ -22,80 +26,129 @@ def handle_exception(e):
     return jsonify({"error": "Internal server error"}), 500
 
 
-@app.route("/")
-def index():
-    return render_template("capture.html")
+def require_auth(fn):
+    """Verifies the request's Bearer token and attaches a user-scoped
+    Supabase client (g.supabase) + the caller's id (g.user_id) so RLS
+    enforces per-user data isolation for the rest of the handler."""
 
-
-def _valid(data_url):
-    return bool(data_url and "," in data_url)
-
-
-def _decoded_tempfile(data_url, suffix):
-    tmp = tempfile.NamedTemporaryFile(suffix=suffix)
-    tmp.write(base64.b64decode(data_url.split(",", 1)[1]))
-    tmp.flush()
-    return tmp
-
-
-@app.route("/api/skin-capture", methods=["POST"])
-def skin_capture():
-    data = request.get_json(silent=True) or {}
-    images_obj = data.get("images")
-
-    if images_obj and isinstance(images_obj, dict):
-        # expect keys like 'left','right','front' — each is processed against
-        # the zones it actually shows (see zones.py); neck_left/neck_right come
-        # from the left/right profile photos too, not a separate photo
-        left_data_url = images_obj.get("left")
-        right_data_url = images_obj.get("right")
-        front_data_url = images_obj.get("front")
-    else:
-        # fallback to legacy single image key: front only
-        left_data_url = None
-        right_data_url = None
-        front_data_url = data.get("image", "")
-
-    if not _valid(front_data_url):
-        return jsonify({"error": "No frontal image provided"}), 400
-
-    all_zones = {}
-
-    with _decoded_tempfile(front_data_url, "_front.jpg") as front_tmp:
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        auth_header = request.headers.get("Authorization", "")
+        token = auth_header.split(" ", 1)[1] if auth_header.startswith("Bearer ") else None
         try:
-            all_zones.update(zones.segment_front(front_tmp.name))
+            g.user_id = supabase_client.get_user_id(token)
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 401
+        g.supabase = supabase_client.get_user_client(token)
+        return fn(*args, **kwargs)
+
+    return wrapper
+
+
+# multipart field name -> short tag used in storage paths / response keys
+PHOTO_FIELDS = {
+    "front_photo": "front",
+    "left_profile_photo": "left",
+    "right_profile_photo": "right",
+}
+
+ACNE_PHOTOS_BUCKET = "acne-photos"
+SIGNED_URL_EXPIRY_SECONDS = 60 * 60  # 1 hour
+
+
+@app.route("/tracker/upload", methods=["POST"])
+@require_auth
+def upload_tracker_entry():
+    missing = [field for field in PHOTO_FIELDS if not request.files.get(field) or not request.files[field].filename]
+    if missing:
+        return jsonify({"error": f"Missing required photo(s): {', '.join(missing)}"}), 400
+
+    temp_paths = {}
+    try:
+        for field, tag in PHOTO_FIELDS.items():
+            file_storage = request.files[field]
+            suffix = os.path.splitext(secure_filename(file_storage.filename))[1] or ".jpg"
+            tmp = tempfile.NamedTemporaryFile(suffix=f"_{tag}{suffix}", delete=False)
+            file_storage.save(tmp.name)
+            tmp.close()
+            temp_paths[tag] = tmp.name
+
+        try:
+            all_zones = zones.segment_all(temp_paths["front"], temp_paths["left"], temp_paths["right"])
         except ValueError as e:
             return jsonify({"error": str(e)}), 400
 
-    if _valid(left_data_url):
-        with _decoded_tempfile(left_data_url, "_left.jpg") as left_tmp:
-            try:
-                left_zones = zones.segment_left_profile(left_tmp.name)
-            except Exception:
-                app.logger.exception("Failed to process left profile photo")
-                left_zones = None
-        if left_zones:
-            all_zones.update(left_zones)
+        scores = severity.score_all_zones(all_zones)
 
-    if _valid(right_data_url):
-        with _decoded_tempfile(right_data_url, "_right.jpg") as right_tmp:
-            try:
-                right_zones = zones.segment_right_profile(right_tmp.name)
-            except Exception:
-                app.logger.exception("Failed to process right profile photo")
-                right_zones = None
-        if right_zones:
-            all_zones.update(right_zones)
+        symptom_answers = {
+            "Excessive Hair Growth (Body/Facial)": int(request.form.get("excessive_hair_growth", 0)),
+            "Recent Weight Gain": int(request.form.get("recent_weight_gain", 0)),
+        }
+        # cycles/ isn't built yet, so there's no regularity data to pass in
+        hormonal_pattern = hormonal_signal.compute_hormonal_likelihood(
+            scores["zones"], symptom_answers, cycle_regularity=None
+        )
 
-    scores = severity.score_all_zones(all_zones)
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        photo_paths = {}
+        for field, tag in PHOTO_FIELDS.items():
+            filename = secure_filename(request.files[field].filename)
+            storage_path = f"{g.user_id}/{timestamp}_{tag}_{filename}"
+            with open(temp_paths[tag], "rb") as f:
+                g.supabase.storage.from_(ACNE_PHOTOS_BUCKET).upload(
+                    storage_path,
+                    f.read(),
+                    {"content-type": request.files[field].mimetype or "image/jpeg"},
+                )
+            photo_paths[tag] = storage_path
 
-    zone_previews = {}
-    for name, img in all_zones.items():
-        buf = io.BytesIO()
-        img.save(buf, format="JPEG")
-        zone_previews[name] = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+        zone_scores = scores["zones"]
+        g.supabase.table("acne_entries").insert(
+            {
+                "user_id": g.user_id,
+                "front_photo_path": photo_paths["front"],
+                "left_photo_path": photo_paths["left"],
+                "right_photo_path": photo_paths["right"],
+                "forehead_score": zone_scores["forehead"],
+                "temple_score": zone_scores["temple"],
+                "cheeks_score": zone_scores["cheeks"],
+                "chin_score": zone_scores["chin"],
+                "jaw_score": zone_scores["jaw"],
+                "neck_score": zone_scores["neck"],
+                "overall_score": scores["overall"],
+                "hormonal_likelihood_pct": hormonal_pattern["likelihood_pct"],
+                "hormonal_reasons": hormonal_pattern["reasons"],
+            }
+        ).execute()
 
-    return jsonify({"scores": scores, "zones": zone_previews})
+        return jsonify({"scores": scores, "hormonal_pattern": hormonal_pattern})
+    finally:
+        for path in temp_paths.values():
+            if os.path.exists(path):
+                os.remove(path)
+
+
+@app.route("/tracker", methods=["GET"])
+@require_auth
+def list_tracker_entries():
+    result = g.supabase.table("acne_entries").select("*").order("logged_at").execute()
+    entries = result.data or []
+
+    for entry in entries:
+        for tag, path_col in (
+            ("front", "front_photo_path"),
+            ("left", "left_photo_path"),
+            ("right", "right_photo_path"),
+        ):
+            path = entry.get(path_col)
+            if not path:
+                continue
+            signed = g.supabase.storage.from_(ACNE_PHOTOS_BUCKET).create_signed_url(
+                path, SIGNED_URL_EXPIRY_SECONDS
+            )
+            entry[f"{tag}_photo_url"] = signed.get("signedURL")
+
+    return jsonify(entries)
 
 
 if __name__ == "__main__":

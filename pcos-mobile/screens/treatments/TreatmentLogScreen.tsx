@@ -20,6 +20,7 @@ import TreatmentTimeline from "../../components/TreatmentTimeline";
 import {
   addTreatment,
   deleteTreatment,
+  endTreatment,
   listTreatments,
   SymptomTag,
   Treatment,
@@ -35,6 +36,11 @@ const MONTH_NAMES = [
 function formatShort(dateKey: string) {
   const [, m, d] = dateKey.split("-").map(Number);
   return `${MONTH_NAMES[m - 1].slice(0, 3)} ${d}`;
+}
+
+function parseDateKey(dateKey: string): Date {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  return new Date(y, m - 1, d);
 }
 
 function toggleTag(tags: SymptomTag[], tag: SymptomTag): SymptomTag[] {
@@ -65,6 +71,19 @@ export default function TreatmentLogScreen({ onPressHome, onPressQuickCheckIn, o
   const [menuTreatmentId, setMenuTreatmentId] = useState<string | null>(null);
   const menuTreatment = treatments.find((t) => t.id === menuTreatmentId) ?? null;
 
+  // Ending a treatment is a two-step flow: pick which active treatment to
+  // end, then give it an end date + reason. showEndSelect covers step one;
+  // endingTreatmentId being set covers step two.
+  const [showEndSelect, setShowEndSelect] = useState(false);
+  const [endingTreatmentId, setEndingTreatmentId] = useState<string | null>(null);
+  const endingTreatment = treatments.find((t) => t.id === endingTreatmentId) ?? null;
+  const [endDate, setEndDate] = useState(new Date());
+  const [endReason, setEndReason] = useState("");
+  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
+  const [endError, setEndError] = useState<string | null>(null);
+  const [endSaving, setEndSaving] = useState(false);
+  const activeTreatments = treatments.filter((t) => !t.endDate);
+
   // Set when a timeline dot is tapped — shows just that date's treatments so
   // the user doesn't have to hunt through the full log to answer "what did I
   // try around then?"
@@ -92,11 +111,10 @@ export default function TreatmentLogScreen({ onPressHome, onPressQuickCheckIn, o
   }
 
   function openEditForm(treatment: Treatment) {
-    const [y, m, d] = treatment.date.split("-").map(Number);
     setEditingId(treatment.id);
     setDraftName(treatment.name);
     setDraftDosage(treatment.dosage ?? "");
-    setDraftDate(new Date(y, m - 1, d));
+    setDraftDate(parseDateKey(treatment.date));
     setDraftTags(treatment.symptomTags);
     setDraftNotes(treatment.notes ?? "");
     setFormError(null);
@@ -155,6 +173,45 @@ export default function TreatmentLogScreen({ onPressHome, onPressQuickCheckIn, o
     if (dayDetailDate && dayDetailTreatments.length === 0) setDayDetailDate(null);
   }, [dayDetailDate, dayDetailTreatments.length]);
 
+  function openEndSelect() {
+    setShowEndSelect(true);
+  }
+
+  function selectTreatmentToEnd(treatment: Treatment) {
+    setEndingTreatmentId(treatment.id);
+    setEndDate(new Date());
+    setEndReason("");
+    setEndError(null);
+    setShowEndDatePicker(false);
+    setShowEndSelect(false);
+  }
+
+  function closeEndFlow() {
+    setShowEndSelect(false);
+    setEndingTreatmentId(null);
+    setShowEndDatePicker(false);
+  }
+
+  async function handleSaveEnd() {
+    if (!endingTreatmentId) return;
+    const reason = endReason.trim();
+    if (!reason) {
+      setEndError("Give a reason for ending this treatment.");
+      return;
+    }
+    setEndSaving(true);
+    setEndError(null);
+    try {
+      const updated = await endTreatment(endingTreatmentId, endDate, reason);
+      setTreatments((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+      closeEndFlow();
+    } catch (err) {
+      setEndError(err instanceof Error ? err.message : "Couldn't end that treatment.");
+    } finally {
+      setEndSaving(false);
+    }
+  }
+
   function renderTreatment(treatment: Treatment) {
     return (
       <View key={treatment.id} style={styles.row}>
@@ -172,6 +229,7 @@ export default function TreatmentLogScreen({ onPressHome, onPressQuickCheckIn, o
           <Text style={styles.rowSubline}>
             {treatment.dosage ? `${treatment.dosage} · ` : ""}
             {formatShort(treatment.date)}
+            {treatment.endDate ? ` – ${formatShort(treatment.endDate)}` : ""}
           </Text>
           {treatment.symptomTags.length > 0 && (
             <View style={styles.tagRow}>
@@ -183,6 +241,9 @@ export default function TreatmentLogScreen({ onPressHome, onPressQuickCheckIn, o
             </View>
           )}
           {treatment.notes && <Text style={styles.rowNotes}>{treatment.notes}</Text>}
+          {treatment.endDate && (
+            <Text style={styles.rowEnded}>Ended: {treatment.endReason}</Text>
+          )}
         </View>
       </View>
     );
@@ -199,10 +260,17 @@ export default function TreatmentLogScreen({ onPressHome, onPressQuickCheckIn, o
         <Text style={styles.title}>TREATMENT LOG</Text>
         <Text style={styles.subtitle}>what are you using?</Text>
 
-        <TouchableOpacity style={styles.addButton} onPress={openAddForm} activeOpacity={0.8}>
-          <SvgXml xml={pillIconXml} width={20} height={20} color="#fff7e7" />
-          <Text style={styles.addButtonText}>Log a Treatment</Text>
-        </TouchableOpacity>
+        <View style={styles.actionRow}>
+          <TouchableOpacity style={styles.addButton} onPress={openAddForm} activeOpacity={0.8}>
+            <SvgXml xml={pillIconXml} width={20} height={20} color="#fff7e7" />
+            <Text style={styles.addButtonText}>Log a Treatment</Text>
+          </TouchableOpacity>
+          {activeTreatments.length > 0 && (
+            <TouchableOpacity style={styles.endButton} onPress={openEndSelect} activeOpacity={0.8}>
+              <Text style={styles.endButtonText}>End a Treatment</Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
         {loading ? (
           <ActivityIndicator color="#e47083" style={{ marginTop: 24 }} />
@@ -383,6 +451,101 @@ export default function TreatmentLogScreen({ onPressHome, onPressQuickCheckIn, o
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      <Modal visible={showEndSelect} transparent animationType="fade" onRequestClose={closeEndFlow}>
+        <TouchableOpacity style={styles.formOverlay} activeOpacity={1} onPress={closeEndFlow}>
+          <TouchableOpacity activeOpacity={1} style={styles.formCard} onPress={() => {}}>
+            <Text style={styles.formTitle}>Which treatment ended?</Text>
+            <ScrollView contentContainerStyle={{ gap: 10, paddingTop: 4 }}>
+              {activeTreatments.map((treatment) => (
+                <TouchableOpacity
+                  key={treatment.id}
+                  style={styles.endSelectRow}
+                  onPress={() => selectTreatmentToEnd(treatment)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.endSelectName}>{treatment.name}</Text>
+                  <Text style={styles.endSelectSubline}>
+                    {treatment.dosage ? `${treatment.dosage} · ` : ""}
+                    started {formatShort(treatment.date)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity style={styles.backButton} onPress={closeEndFlow} activeOpacity={0.8}>
+              <Text style={styles.formCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal visible={endingTreatmentId !== null} transparent animationType="fade" onRequestClose={closeEndFlow}>
+        <View style={styles.formOverlay}>
+          <View style={styles.formCard}>
+            {showEndDatePicker && endingTreatment ? (
+              <>
+                <Text style={styles.formTitle}>End date</Text>
+                <MiniCalendar
+                  initialDate={endDate}
+                  minDate={parseDateKey(endingTreatment.date)}
+                  maxDate={new Date()}
+                  onSelect={(d) => setEndDate(d)}
+                />
+                <TouchableOpacity
+                  style={styles.backButton}
+                  onPress={() => setShowEndDatePicker(false)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.formCancelText}>Done</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <ScrollView contentContainerStyle={{ gap: 12 }}>
+                <Text style={styles.formTitle}>End {endingTreatment?.name}</Text>
+
+                <TouchableOpacity
+                  style={styles.dateField}
+                  onPress={() => setShowEndDatePicker(true)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.dateFieldLabel}>End date</Text>
+                  <Text style={styles.dateFieldValue}>
+                    {formatShort(
+                      `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, "0")}-${String(endDate.getDate()).padStart(2, "0")}`,
+                    )}
+                    , {endDate.getFullYear()}
+                  </Text>
+                </TouchableOpacity>
+
+                <TextInput
+                  value={endReason}
+                  onChangeText={setEndReason}
+                  placeholder="Why are you ending this treatment?"
+                  placeholderTextColor="rgba(0,0,0,0.35)"
+                  multiline
+                  style={[styles.input, styles.notesInput]}
+                />
+
+                {endError && <Text style={styles.error}>{endError}</Text>}
+
+                <View style={styles.formButtonRow}>
+                  <TouchableOpacity style={styles.formCancelButton} onPress={closeEndFlow} activeOpacity={0.8}>
+                    <Text style={styles.formCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.formSaveButton}
+                    onPress={handleSaveEnd}
+                    disabled={endSaving}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.formSaveText}>End Treatment</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -393,6 +556,13 @@ const styles = StyleSheet.create({
   content: { padding: 16, paddingTop: 14, paddingBottom: 40, alignItems: "center" },
   title: { fontSize: 32, fontWeight: "800", color: "#000" },
   subtitle: { fontSize: 15, fontWeight: "800", color: "#000", marginTop: 4 },
+  actionRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 12,
+    marginTop: 20,
+  },
   addButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -401,9 +571,18 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingVertical: 12,
     paddingHorizontal: 24,
-    marginTop: 20,
   },
   addButtonText: { fontSize: 14, fontWeight: "800", color: "#fff7e7" },
+  endButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: "#89b8c2",
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+  },
+  endButtonText: { fontSize: 14, fontWeight: "800", color: "#89b8c2" },
   emptyText: { fontSize: 14, fontWeight: "700", color: "rgba(0,0,0,0.5)", marginTop: 24 },
   row: {
     width: "100%",
@@ -427,6 +606,14 @@ const styles = StyleSheet.create({
   },
   tagChipText: { fontSize: 11, fontWeight: "800", color: "#fff7e7" },
   rowNotes: { fontSize: 13, fontWeight: "600", color: "#fff7e7", marginTop: 4 },
+  rowEnded: { fontSize: 13, fontWeight: "700", color: "rgba(255,247,231,0.85)", marginTop: 4, fontStyle: "italic" },
+  endSelectRow: {
+    backgroundColor: "#f49aa3",
+    borderRadius: 10,
+    padding: 14,
+  },
+  endSelectName: { fontSize: 15, fontWeight: "800", color: "#fff7e7" },
+  endSelectSubline: { fontSize: 12, fontWeight: "700", color: "rgba(255,247,231,0.85)", marginTop: 2 },
   formOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",

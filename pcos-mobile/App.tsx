@@ -1,9 +1,10 @@
 import { Pacifico_400Regular, useFonts } from "@expo-google-fonts/pacifico";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import ScreenTransition from "./components/ScreenTransition";
 import { getSession, signOut } from "./lib/auth";
 import { listCycles } from "./lib/cycles_api";
 import { clearNonDemoData, isDemoDataEnabled, setDemoDataEnabled } from "./lib/seed_demo_data";
@@ -15,6 +16,8 @@ import LoginScreen from "./screens/login/LoginScreen";
 import NotesScreen from "./screens/notes/NotesScreen";
 import ProfileScreen from "./screens/profile/ProfileScreen";
 import CaptureScreen from "./screens/skin_tracking/CaptureScreen";
+import HistoryScreen from "./screens/skin_tracking/HistoryScreen";
+import ResultScreen, { ResultScreenData } from "./screens/skin_tracking/ResultScreen";
 import SignUpScreen from "./screens/signup/SignUpScreen";
 import SymptomCheckInScreen from "./screens/symptom_checkin/SymptomCheckInScreen";
 import TreatmentLogScreen from "./screens/treatments/TreatmentLogScreen";
@@ -26,7 +29,9 @@ type Screen =
   | "signUp"
   | "dashboard"
   | "symptomCheckIn"
+  | "trackerHistory"
   | "capture"
+  | "trackerResult"
   | "hairTracker"
   | "analytics"
   | "profile"
@@ -40,13 +45,35 @@ const SCREEN_BACKGROUNDS: Record<Screen, string> = {
   signUp: "#ffcc7d",
   dashboard: "#fff7e7",
   symptomCheckIn: "#fff7e7",
+  trackerHistory: "#fff7e7",
   capture: "#fff7e7",
+  trackerResult: "#fff7e7",
   hairTracker: "#fff7e7",
   analytics: "#fff7e7",
   profile: "#fff7e7",
   cycleTracking: "#fff7e7",
   notes: "#fff7e7",
   treatmentLog: "#fff7e7",
+};
+
+// Rough "distance from Welcome" per screen — used only to decide which way
+// a transition should slide (deeper = forward/slide-from-right, shallower =
+// back/slide-from-left). Not a real navigation stack, just a heuristic.
+const SCREEN_DEPTH: Record<Screen, number> = {
+  welcome: 0,
+  login: 1,
+  signUp: 1,
+  dashboard: 2,
+  symptomCheckIn: 3,
+  trackerHistory: 3,
+  hairTracker: 3,
+  analytics: 3,
+  profile: 3,
+  cycleTracking: 3,
+  notes: 3,
+  treatmentLog: 3,
+  capture: 4,
+  trackerResult: 5,
 };
 
 const comingSoon = (feature: string) => () =>
@@ -60,6 +87,11 @@ export default function App() {
   const [fontsLoaded] = useFonts({ Pacifico_400Regular });
   const [periodsThisYear, setPeriodsThisYear] = useState(0);
   const [demoDataEnabled, setDemoDataEnabledState] = useState(false);
+  const [trackerResultData, setTrackerResultData] = useState<ResultScreenData | null>(null);
+  const showTrackerResult = (data: ResultScreenData) => {
+    setTrackerResultData(data);
+    setScreen("trackerResult");
+  };
   const goHome = () => setScreen("dashboard");
   const goProfile = () => setScreen("profile");
 
@@ -119,6 +151,13 @@ export default function App() {
     setScreen("login");
   }
 
+  const prevDepthRef = useRef(0);
+  const depth = screen ? SCREEN_DEPTH[screen] : 0;
+  const direction: "forward" | "back" = depth >= prevDepthRef.current ? "forward" : "back";
+  useEffect(() => {
+    prevDepthRef.current = depth;
+  }, [depth]);
+
   if (screen === null || !fontsLoaded) {
     return (
       <SafeAreaProvider>
@@ -129,9 +168,10 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <View style={[styles.container, { backgroundColor: SCREEN_BACKGROUNDS[screen] }]}>
-        <StatusBar style="auto" hidden={screen === "capture"} />
-        {screen === "welcome" && <WelcomeScreen onContinue={goHome} />}
+      <View style={styles.container}>
+        <StatusBar style="auto" />
+        <ScreenTransition screenKey={screen} direction={direction} backgroundColor={SCREEN_BACKGROUNDS[screen]}>
+        {screen === "welcome" && <WelcomeScreen onContinue={() => setScreen("login")} />}
         {screen === "login" && (
           <LoginScreen
             onLoggedIn={goHome}
@@ -156,7 +196,7 @@ export default function App() {
         )}
         {screen === "symptomCheckIn" && (
           <SymptomCheckInScreen
-            onPressAcneTracker={() => setScreen("capture")}
+            onPressAcneTracker={() => setScreen("trackerHistory")}
             onPressHairTracker={() => setScreen("hairTracker")}
             onPressAnalytics={() => setScreen("analytics")}
             onPressTreatmentLog={() => setScreen("treatmentLog")}
@@ -164,8 +204,27 @@ export default function App() {
             onPressProfile={goProfile}
           />
         )}
+        {screen === "trackerHistory" && (
+          <HistoryScreen
+            onPressCapture={() => setScreen("capture")}
+            onSelectEntry={showTrackerResult}
+            onPressHome={goHome}
+            onPressQuickCheckIn={() => setScreen("symptomCheckIn")}
+            onPressProfile={goProfile}
+          />
+        )}
         {screen === "capture" && (
           <CaptureScreen
+            onPressHome={goHome}
+            onPressQuickCheckIn={() => setScreen("symptomCheckIn")}
+            onPressProfile={goProfile}
+            onSubmitted={showTrackerResult}
+          />
+        )}
+        {screen === "trackerResult" && trackerResultData && (
+          <ResultScreen
+            data={trackerResultData}
+            onPressBack={() => setScreen("trackerHistory")}
             onPressHome={goHome}
             onPressQuickCheckIn={() => setScreen("symptomCheckIn")}
             onPressProfile={goProfile}
@@ -219,6 +278,7 @@ export default function App() {
             onPressProfile={goProfile}
           />
         )}
+        </ScreenTransition>
       </View>
     </SafeAreaProvider>
   );

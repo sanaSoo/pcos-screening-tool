@@ -26,7 +26,7 @@
     },
     "plugins": [
       [
-        "expo-camera",
+        "expo-image-picker",
         {
           "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera to take skin-tracking photos."
         }

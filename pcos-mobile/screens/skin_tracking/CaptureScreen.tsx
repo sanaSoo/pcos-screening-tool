@@ -1,10 +1,8 @@
-import { CameraView, useCameraPermissions } from "expo-camera";
-import { File } from "expo-file-system";
-import { useRef, useState } from "react";
+import * as ImagePicker from "expo-image-picker";
+import { useState } from "react";
 import {
   ActivityIndicator,
   Image,
-  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,385 +12,342 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { SvgXml } from "react-native-svg";
 
-import { cameraRetakeXml, profileSilhouetteXml } from "../../assets/camera/icons";
+import { cameraRetakeXml } from "../../assets/camera/icons";
 import InfoButton from "../../components/InfoButton";
 import NavigationBar from "../../components/NavigationBar";
 import { markTrackedThisWeek } from "../../lib/daily_tracking";
-import {
-  saveSkinCaptureHistory,
-  SkinCaptureResponse,
-  submitSkinCapture,
-} from "../../lib/skin_tracking_api";
+import { HORMONAL_SYMPTOM_KEYS, uploadAcnePhoto } from "../../lib/skin_tracking_api";
+import { ResultScreenData } from "./ResultScreen";
 
-const STEP_NAMES = ["Left profile", "Right profile", "Front"];
+type StepKey = "front" | "left" | "right";
+
+const STEPS: { key: StepKey; label: string; instruction: string }[] = [
+  { key: "front", label: "Front", instruction: "Face the camera directly, with even lighting." },
+  {
+    key: "left",
+    label: "Left profile",
+    instruction: "Turn so your left cheek faces the camera, keeping your ear and jaw visible.",
+  },
+  {
+    key: "right",
+    label: "Right profile",
+    instruction: "Turn so your right cheek faces the camera, keeping your ear and jaw visible.",
+  },
+];
+
+function stepKeyFromError(message: string): StepKey | null {
+  if (/front photo/i.test(message)) return "front";
+  if (/left profile/i.test(message)) return "left";
+  if (/right profile/i.test(message)) return "right";
+  return null;
+}
 
 type Props = {
   onPressHome?: () => void;
   onPressQuickCheckIn?: () => void;
   onPressProfile?: () => void;
+  onSubmitted?: (result: ResultScreenData) => void;
 };
 
-// expo-camera always writes the captured photo to a cache file on disk (photo.uri)
-// even when we only use the inline base64 data. We never need that file, so delete
-// it immediately — otherwise every capture leaves a residual copy of the photo on
-// the device after this screen only ever needed the in-memory base64 string.
-function deleteCachedPhoto(uri: string) {
-  if (!uri.startsWith("file://")) return; // e.g. web, where uri is just the base64 data
-  try {
-    new File(uri).delete();
-  } catch {
-    // best-effort cleanup; not fatal if it fails
-  }
-}
-
-export default function CaptureScreen({ onPressHome, onPressQuickCheckIn, onPressProfile }: Props) {
-  const [permission, requestPermission] = useCameraPermissions();
-  const cameraRef = useRef<CameraView>(null);
-
-  const [step, setStep] = useState(0);
-  const [captures, setCaptures] = useState<(string | null)[]>([
-    null,
-    null,
-    null,
-  ]);
+export default function CaptureScreen({ onPressHome, onPressQuickCheckIn, onPressProfile, onSubmitted }: Props) {
+  const [phase, setPhase] = useState<"capture" | "review">("capture");
+  const [stepIndex, setStepIndex] = useState(0);
+  const [captures, setCaptures] = useState<Record<StepKey, string | null>>({
+    front: null,
+    left: null,
+    right: null,
+  });
+  const [excessiveHairGrowth, setExcessiveHairGrowth] = useState(false);
+  const [recentWeightGain, setRecentWeightGain] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [results, setResults] = useState<SkinCaptureResponse | null>(null);
-  const [zoomedZone, setZoomedZone] = useState<string | null>(null);
 
-  if (!permission) {
-    return <SafeAreaView style={styles.center} />;
-  }
+  const step = STEPS[stepIndex];
 
-  if (!permission.granted) {
-    return (
-      <SafeAreaView style={styles.center}>
-        <Text style={styles.prompt}>
-          Camera access is needed to capture skin-tracking photos.
-        </Text>
-        <TouchableOpacity style={styles.primaryButton} onPress={requestPermission}>
-          <Text style={styles.primaryButtonText}>Grant camera access</Text>
-        </TouchableOpacity>
-        {onPressHome && (
-          <TouchableOpacity style={styles.homeLink} onPress={onPressHome}>
-            <Text style={styles.homeLinkText}>Back to home</Text>
-          </TouchableOpacity>
-        )}
-      </SafeAreaView>
-    );
+  function goToStep(key: StepKey) {
+    setError(null);
+    setStepIndex(STEPS.findIndex((s) => s.key === key));
+    setPhase("capture");
   }
 
   async function handleCapture() {
-    if (!cameraRef.current) return;
     setError(null);
 
-    const photo = await cameraRef.current.takePictureAsync({
-      base64: true,
-      quality: 0.8,
-    });
-    if (!photo?.base64) {
-      setError("Failed to capture photo, please try again.");
-      return;
+    // Camera preferred over the library so each capture is fresh, per the
+    // capture flow's whole point — falls back to the library if camera
+    // access is denied rather than dead-ending the user.
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    const result = permission.granted
+      ? await ImagePicker.launchCameraAsync({
+          mediaTypes: ["images"],
+          quality: 0.8,
+          cameraType: ImagePicker.CameraType.front,
+        })
+      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8 });
+
+    if (result.canceled || !result.assets?.[0]?.uri) return;
+
+    const next = { ...captures, [step.key]: result.assets[0].uri };
+    setCaptures(next);
+
+    if (STEPS.every((s) => next[s.key])) {
+      setPhase("review");
+    } else {
+      setStepIndex((i) => i + 1);
     }
-    const dataUrl = `data:image/jpeg;base64,${photo.base64}`;
-    deleteCachedPhoto(photo.uri);
+  }
 
-    const nextCaptures = [...captures];
-    nextCaptures[step] = dataUrl;
-    setCaptures(nextCaptures);
-
-    if (step < 2) {
-      setStep(step + 1);
-      return;
-    }
-
+  async function handleSubmit() {
+    if (!captures.front || !captures.left || !captures.right) return;
     setSubmitting(true);
+    setError(null);
     try {
-      const data = await submitSkinCapture({
-        left: nextCaptures[0]!,
-        right: nextCaptures[1]!,
-        front: nextCaptures[2]!,
-      });
-      setResults(data);
+      const symptomAnswers = {
+        [HORMONAL_SYMPTOM_KEYS.excessiveHairGrowth]: excessiveHairGrowth ? 1 : 0,
+        [HORMONAL_SYMPTOM_KEYS.recentWeightGain]: recentWeightGain ? 1 : 0,
+      };
+      const result = await uploadAcnePhoto(
+        { front: captures.front, left: captures.left, right: captures.right },
+        symptomAnswers,
+      );
       markTrackedThisWeek("acne");
-      saveSkinCaptureHistory(data);
+      onSubmitted?.({
+        zones: result.scores.zones,
+        overall: result.scores.overall,
+        hormonalLikelihoodPct: result.hormonal_pattern.likelihood_pct,
+        hormonalReasons: result.hormonal_pattern.reasons,
+        disclaimer: result.hormonal_pattern.disclaimer,
+        loggedAt: new Date().toISOString(),
+        // Local capture URIs, not the storage-backed signed URLs — good
+        // enough for an immediate post-submit preview.
+        photoUrls: { front: captures.front, left: captures.left, right: captures.right },
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Request failed");
     } finally {
       setSubmitting(false);
-      setStep(0);
-      setCaptures([null, null, null]);
     }
   }
 
-  function handleCaptureAgain() {
-    setResults(null);
-    setError(null);
-    setStep(0);
-    setCaptures([null, null, null]);
-  }
+  const errorStepKey = error ? stepKeyFromError(error) : null;
 
-  if (results) {
-    const zoomed = zoomedZone
-      ? { name: zoomedZone, score: results.scores[zoomedZone] as any, uri: results.zones[zoomedZone] }
-      : null;
-
+  if (phase === "review") {
     return (
       <SafeAreaView style={styles.screenWrapper}>
-      <ScrollView contentContainerStyle={styles.resultsContainer}>
-        <InfoButton
-          title="Why Track Your Skin"
-          message="Hormonal acne is one of the most common PCOS symptoms. Photographing it over time makes it easier to see whether treatments are working and to catch flare-ups tied to your cycle."
-          style={{ position: "absolute", top: 40, right: 16 }}
-        />
-        <Text style={styles.heading}>ACNE TRACKER</Text>
-        <Text style={styles.overall}>
-          Overall severity: {results.scores.overall}
-        </Text>
-        <View style={styles.zoneGrid}>
-          {Object.keys(results.zones).map((zoneName) => {
-            const score = results.scores[zoneName] as any;
-            return (
+        <ScrollView contentContainerStyle={styles.content}>
+          <InfoButton
+            title="Why Track Your Skin"
+            message="Hormonal acne is one of the most common PCOS symptoms. Photographing it over time makes it easier to see whether treatments are working and to catch flare-ups tied to your cycle."
+            style={{ position: "absolute", top: 0, right: 16 }}
+          />
+          <Text style={styles.heading}>REVIEW PHOTOS</Text>
+          <Text style={styles.subheading}>Retake any photo before submitting.</Text>
+
+          <View style={styles.reviewGrid}>
+            {STEPS.map((s) => (
+              <View key={s.key} style={styles.reviewCard}>
+                {captures[s.key] && <Image source={{ uri: captures[s.key]! }} style={styles.reviewImage} />}
+                <Text style={styles.reviewLabel}>{s.label}</Text>
+                <TouchableOpacity
+                  style={styles.retakeButton}
+                  onPress={() => goToStep(s.key)}
+                  activeOpacity={0.8}
+                  disabled={submitting}
+                >
+                  <SvgXml xml={cameraRetakeXml} width={14} height={13} color="#fff7e7" />
+                  <Text style={styles.retakeButtonText}>Retake</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+
+          <Text style={styles.checklistTitle}>Quick symptom check</Text>
+          <TouchableOpacity
+            style={styles.checkboxRow}
+            onPress={() => setExcessiveHairGrowth((v) => !v)}
+            activeOpacity={0.8}
+            disabled={submitting}
+          >
+            <View style={[styles.checkbox, excessiveHairGrowth && styles.checkboxChecked]}>
+              {excessiveHairGrowth && <Text style={styles.checkboxMark}>✓</Text>}
+            </View>
+            <Text style={styles.checkboxLabel}>Excessive facial/body hair growth</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.checkboxRow}
+            onPress={() => setRecentWeightGain((v) => !v)}
+            activeOpacity={0.8}
+            disabled={submitting}
+          >
+            <View style={[styles.checkbox, recentWeightGain && styles.checkboxChecked]}>
+              {recentWeightGain && <Text style={styles.checkboxMark}>✓</Text>}
+            </View>
+            <Text style={styles.checkboxLabel}>Recent weight gain</Text>
+          </TouchableOpacity>
+
+          {error && (
+            <View style={styles.errorBox}>
+              <Text style={styles.errorText}>{error}</Text>
               <TouchableOpacity
-                key={zoneName}
-                style={styles.zoneCard}
-                onPress={() => setZoomedZone(zoneName)}
+                style={styles.errorRetakeButton}
+                onPress={() => (errorStepKey ? goToStep(errorStepKey) : undefined)}
                 activeOpacity={0.8}
               >
-                <Image
-                  source={{ uri: results.zones[zoneName] }}
-                  style={styles.zoneImage}
-                />
-                <View style={styles.zoneInfo}>
-                  <Text style={styles.zoneName}>
-                    {zoneName.replace(/_/g, " ")}
-                  </Text>
-                  <Text style={styles.zoneDetail}>
-                    {score.label} · confidence {score.confidence} · severity{" "}
-                    {score.severity_score}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-        <TouchableOpacity style={styles.primaryButton} onPress={handleCaptureAgain}>
-          <Text style={styles.primaryButtonText}>Capture again</Text>
-        </TouchableOpacity>
-
-        <Modal
-          visible={zoomed !== null}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setZoomedZone(null)}
-        >
-          <TouchableOpacity
-            style={styles.zoomOverlay}
-            activeOpacity={1}
-            onPress={() => setZoomedZone(null)}
-          >
-            {zoomed && (
-              <View style={styles.zoomCard}>
-                {/* contain (not cover) so the crop's real aspect ratio shows —
-                    e.g. jaw crops are wide/thin, temple crops are more square */}
-                <Image
-                  source={{ uri: zoomed.uri }}
-                  style={styles.zoomImage}
-                  resizeMode="contain"
-                />
-                <Text style={styles.zoomName}>{zoomed.name.replace(/_/g, " ")}</Text>
-                <Text style={styles.zoomDetail}>
-                  {zoomed.score.label} · confidence {zoomed.score.confidence} ·
-                  severity {zoomed.score.severity_score}
+                <Text style={styles.errorRetakeText}>
+                  {errorStepKey ? `Retake ${STEPS.find((s) => s.key === errorStepKey)?.label} photo` : "Try again"}
                 </Text>
-                <Text style={styles.zoomHint}>Tap anywhere to close</Text>
-              </View>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={handleSubmit}
+            disabled={submitting}
+            activeOpacity={0.8}
+          >
+            {submitting ? (
+              <ActivityIndicator color="#fff7e7" />
+            ) : (
+              <Text style={styles.primaryButtonText}>Submit</Text>
             )}
           </TouchableOpacity>
-        </Modal>
-      </ScrollView>
-      <NavigationBar onPressHome={onPressHome} onPressQuickCheckIn={onPressQuickCheckIn} onPressProfile={onPressProfile} />
+          {submitting && (
+            <Text style={styles.submittingHint}>
+              Analyzing your photos locally — this can take a few seconds.
+            </Text>
+          )}
+        </ScrollView>
+        <NavigationBar onPressHome={onPressHome} onPressQuickCheckIn={onPressQuickCheckIn} onPressProfile={onPressProfile} />
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.screenWrapper}>
-    <View style={styles.container}>
-      <InfoButton
-        title="Why Track Your Skin"
-        message="Hormonal acne is one of the most common PCOS symptoms. Photographing it over time makes it easier to see whether treatments are working and to catch flare-ups tied to your cycle."
-        style={{ position: "absolute", top: 40, right: 16, zIndex: 1 }}
-      />
-      <Text style={styles.heading}>ACNE TRACKER</Text>
-
-      <View style={styles.cameraFrame}>
-        <CameraView ref={cameraRef} style={styles.camera} facing="front" />
-        <SvgXml
-          xml={profileSilhouetteXml}
-          width={160}
-          height={143}
-          color="#365013"
-          opacity={0.6}
-          style={styles.silhouetteOverlay}
+      <View style={styles.content}>
+        <InfoButton
+          title="Why Track Your Skin"
+          message="Hormonal acne is one of the most common PCOS symptoms. Photographing it over time makes it easier to see whether treatments are working and to catch flare-ups tied to your cycle."
+          style={{ position: "absolute", top: 0, right: 16, zIndex: 1 }}
         />
-      </View>
+        <Text style={styles.heading}>ACNE TRACKER</Text>
+        <Text style={styles.stepCount}>
+          Step {stepIndex + 1} of {STEPS.length}: {step.label}
+        </Text>
+        <Text style={styles.instruction}>{step.instruction}</Text>
 
-      <Text style={styles.prompt}>
-        Position yourself: we&apos;ll take three photos — left profile, right
-        profile, then front.
-      </Text>
-
-      <View style={styles.stepRow}>
-        <Text style={styles.stepLabel}>Step: {STEP_NAMES[step]}</Text>
         <View style={styles.thumbRow}>
-          {captures.map((capture, i) => {
-            const canRetake = capture && !submitting;
-            return (
-              <TouchableOpacity
-                key={i}
-                disabled={!canRetake}
-                onPress={() => setStep(i)}
-                style={[
-                  styles.thumb,
-                  i === step ? styles.thumbActive : styles.thumbInactive,
-                ]}
-              >
-                {capture && (
-                  <Image source={{ uri: capture }} style={styles.thumbImage} />
-                )}
-                {canRetake && (
-                  <View style={styles.retakeBadge}>
-                    <SvgXml xml={cameraRetakeXml} width={14} height={13} color="#365013" />
-                  </View>
-                )}
-              </TouchableOpacity>
-            );
-          })}
+          {STEPS.map((s, i) => (
+            <View
+              key={s.key}
+              style={[styles.thumb, i === stepIndex ? styles.thumbActive : styles.thumbInactive]}
+            >
+              {captures[s.key] && <Image source={{ uri: captures[s.key]! }} style={styles.thumbImage} />}
+            </View>
+          ))}
         </View>
-      </View>
 
-      {error && <Text style={styles.error}>{error}</Text>}
+        {error && <Text style={styles.error}>{error}</Text>}
 
-      <TouchableOpacity
-        style={styles.primaryButton}
-        onPress={handleCapture}
-        disabled={submitting}
-      >
-        {submitting ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.primaryButtonText}>
-            {step < 2 ? "Capture" : "Submit"}
-          </Text>
+        <TouchableOpacity style={styles.primaryButton} onPress={handleCapture} activeOpacity={0.8}>
+          <Text style={styles.primaryButtonText}>Take Photo</Text>
+        </TouchableOpacity>
+
+        {onPressHome && (
+          <TouchableOpacity style={styles.homeLink} onPress={onPressHome}>
+            <Text style={styles.homeLinkText}>Back to home</Text>
+          </TouchableOpacity>
         )}
-      </TouchableOpacity>
-    </View>
-    <NavigationBar onPressHome={onPressHome} onPressProfile={onPressProfile} />
+      </View>
+      <NavigationBar onPressHome={onPressHome} onPressQuickCheckIn={onPressQuickCheckIn} onPressProfile={onPressProfile} />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   screenWrapper: { flex: 1, backgroundColor: "#fff7e7" },
-  container: { flex: 1, padding: 16, paddingTop: 40 },
-  center: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
-  },
-  heading: {
-    fontSize: 28,
-    fontWeight: "800",
-    color: "#000",
-    textAlign: "center",
-    marginBottom: 12,
-  },
-  cameraFrame: {
-    flex: 1,
-    borderRadius: 15,
-    borderWidth: 3,
-    borderColor: "#365013",
-    overflow: "hidden",
-    backgroundColor: "#fff",
-  },
-  camera: { flex: 1 },
-  silhouetteOverlay: {
-    position: "absolute",
-    alignSelf: "center",
-    top: "20%",
-  },
-  prompt: { fontSize: 14, color: "#444", marginTop: 12, textAlign: "center" },
-  stepRow: { marginTop: 12, alignItems: "center" },
-  stepLabel: { fontWeight: "600", marginBottom: 8 },
-  thumbRow: { flexDirection: "row", gap: 8 },
+  content: { flex: 1, padding: 16, paddingTop: 40, alignItems: "center" },
+  heading: { fontSize: 28, fontWeight: "800", color: "#000", textAlign: "center" },
+  subheading: { fontSize: 13, fontWeight: "700", color: "rgba(0,0,0,0.6)", marginTop: 4, marginBottom: 16 },
+  stepCount: { fontSize: 15, fontWeight: "800", color: "#000", marginTop: 16 },
+  instruction: { fontSize: 14, color: "#444", marginTop: 8, textAlign: "center", paddingHorizontal: 12 },
+  thumbRow: { flexDirection: "row", gap: 12, marginTop: 28 },
   thumb: {
-    width: 56,
-    height: 56,
-    borderRadius: 6,
+    width: 64,
+    height: 64,
+    borderRadius: 8,
     borderWidth: 2,
-    overflow: "visible",
+    overflow: "hidden",
     backgroundColor: "#f5f5f5",
   },
-  thumbActive: { borderColor: "#365013" },
+  thumbActive: { borderColor: "#e47083" },
   thumbInactive: { borderColor: "#ddd" },
-  thumbImage: { width: "100%", height: "100%", borderRadius: 4 },
-  retakeBadge: {
-    position: "absolute",
-    bottom: -8,
-    right: -8,
+  thumbImage: { width: "100%", height: "100%" },
+  error: { color: "#7a1f2b", fontWeight: "700", marginTop: 16, textAlign: "center" },
+  primaryButton: {
+    backgroundColor: "#e47083",
+    borderRadius: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 40,
+    alignItems: "center",
+    marginTop: 28,
+  },
+  primaryButtonText: { color: "#fff7e7", fontSize: 16, fontWeight: "800" },
+  homeLink: { marginTop: 16 },
+  homeLinkText: { color: "#e47083", fontSize: 14, fontWeight: "700" },
+  reviewGrid: { width: "100%", flexDirection: "row", flexWrap: "wrap", gap: 12, justifyContent: "center" },
+  reviewCard: {
+    width: "30%",
+    alignItems: "center",
+    backgroundColor: "#f49aa3",
+    borderRadius: 10,
+    padding: 8,
+  },
+  reviewImage: { width: "100%", height: 90, borderRadius: 6, backgroundColor: "#fff" },
+  reviewLabel: { fontSize: 12, fontWeight: "800", color: "#fff7e7", marginTop: 6, textAlign: "center" },
+  retakeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    backgroundColor: "rgba(0,0,0,0.15)",
+  },
+  retakeButtonText: { fontSize: 11, fontWeight: "700", color: "#fff7e7" },
+  checklistTitle: { fontSize: 15, fontWeight: "800", color: "#000", marginTop: 24, alignSelf: "flex-start" },
+  checkboxRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 12, alignSelf: "flex-start" },
+  checkbox: {
     width: 22,
     height: 22,
-    borderRadius: 11,
-    backgroundColor: "#fff7e7",
-    borderWidth: 1,
-    borderColor: "#365013",
+    borderRadius: 5,
+    borderWidth: 2,
+    borderColor: "#e47083",
     alignItems: "center",
     justifyContent: "center",
   },
-  error: { color: "#c0392b", marginTop: 12, textAlign: "center" },
-  primaryButton: {
-    backgroundColor: "#365013",
-    borderRadius: 8,
-    paddingVertical: 14,
+  checkboxChecked: { backgroundColor: "#e47083" },
+  checkboxMark: { color: "#fff7e7", fontSize: 13, fontWeight: "800" },
+  checkboxLabel: { fontSize: 14, fontWeight: "600", color: "#000" },
+  errorBox: {
+    width: "100%",
+    backgroundColor: "rgba(174,0,0,0.08)",
+    borderRadius: 10,
+    padding: 14,
+    marginTop: 20,
     alignItems: "center",
-    marginTop: 16,
-    marginBottom: 40,
+    gap: 10,
   },
-  primaryButtonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  homeLink: { marginTop: 16 },
-  homeLinkText: { color: "#365013", fontSize: 14, fontWeight: "600" },
-  resultsContainer: { padding: 16, paddingTop: 40 },
-  overall: { fontSize: 20, fontWeight: "600", marginBottom: 16 },
-  zoneGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
-  zoneCard: {
-    width: "47%",
-    borderWidth: 1,
-    borderColor: "#eee",
+  errorText: { color: "#7a1f2b", fontWeight: "700", textAlign: "center" },
+  errorRetakeButton: {
     borderRadius: 8,
-    overflow: "hidden",
+    borderWidth: 2,
+    borderColor: "#7a1f2b",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
   },
-  zoneImage: { width: "100%", height: 140 },
-  zoneInfo: { padding: 8 },
-  zoneName: { fontWeight: "600", textTransform: "capitalize" },
-  zoneDetail: { fontSize: 12, color: "#555", marginTop: 2 },
-  zoomOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.85)",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
-  },
-  zoomCard: { width: "100%", alignItems: "center" },
-  zoomImage: { width: "100%", height: 400, backgroundColor: "#111", borderRadius: 8 },
-  zoomName: {
-    color: "#fff",
-    fontWeight: "600",
-    fontSize: 18,
-    textTransform: "capitalize",
-    marginTop: 16,
-  },
-  zoomDetail: { color: "#ddd", fontSize: 14, marginTop: 4, textAlign: "center" },
-  zoomHint: { color: "#999", fontSize: 12, marginTop: 16 },
+  errorRetakeText: { color: "#7a1f2b", fontWeight: "800", fontSize: 13 },
+  submittingHint: { fontSize: 12, color: "rgba(0,0,0,0.55)", marginTop: 10, textAlign: "center" },
 });

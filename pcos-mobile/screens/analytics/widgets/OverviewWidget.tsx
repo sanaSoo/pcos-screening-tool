@@ -5,14 +5,14 @@ import { hasTrackedThisWeek } from "../../../lib/daily_tracking";
 import { formatShortDate } from "../../../lib/date_format";
 import { Cycle, listCycles } from "../../../lib/cycles_api";
 import { HairLog, listHairLogs } from "../../../lib/hair_tracking_api";
-import { listSkinCaptureHistory, SkinCaptureHistoryEntry } from "../../../lib/skin_tracking_api";
+import { fetchTrackerHistory, TrackerEntry } from "../../../lib/skin_tracking_api";
 import WidgetCard from "./WidgetCard";
 
 type Summary = {
   periodsThisYear: number;
   lastPeriod: Cycle | null;
   acneCheckIns: number;
-  lastAcne: SkinCaptureHistoryEntry | null;
+  lastAcne: TrackerEntry | null;
   hairCheckIns: number;
   lastHair: HairLog | null;
   acneTrackedThisWeek: boolean;
@@ -34,17 +34,18 @@ export default function OverviewWidget() {
   useEffect(() => {
     Promise.all([
       listCycles(),
-      listSkinCaptureHistory(),
+      fetchTrackerHistory().catch(() => [] as TrackerEntry[]),
       listHairLogs(),
       hasTrackedThisWeek("acne"),
       hasTrackedThisWeek("hairSkin"),
     ]).then(([cycles, skinHistory, hairLogs, acneTrackedThisWeek, hairTrackedThisWeek]) => {
       const currentYear = new Date().getFullYear();
       setSummary({
-        periodsThisYear: cycles.filter((c) => Number(c.startDate.slice(0, 4)) === currentYear).length,
+        periodsThisYear: cycles.filter((c: Cycle) => Number(c.startDate.slice(0, 4)) === currentYear).length,
         lastPeriod: cycles[0] ?? null,
         acneCheckIns: skinHistory.length,
-        lastAcne: skinHistory[0] ?? null,
+        // Backend returns ascending by logged_at, so the most recent entry is last.
+        lastAcne: skinHistory[skinHistory.length - 1] ?? null,
         hairCheckIns: hairLogs.length,
         lastHair: hairLogs[0] ?? null,
         acneTrackedThisWeek,
@@ -73,7 +74,7 @@ export default function OverviewWidget() {
           <StatTile label="Acne check-ins" value={String(summary.acneCheckIns)} />
           <StatTile
             label="Last acne severity"
-            value={summary.lastAcne ? String(summary.lastAcne.overall) : "—"}
+            value={summary.lastAcne ? String(summary.lastAcne.overall_score) : "—"}
           />
           <StatTile label="Hair check-ins" value={String(summary.hairCheckIns)} />
           <StatTile

@@ -68,3 +68,10 @@ export async function getSession(): Promise<Session | null> {
   const { data } = await supabase.auth.getSession();
   return data.session;
 }
+
+// For attaching `Authorization: Bearer <token>` to Flask requests — see
+// lib/skin_tracking_api.ts.
+export async function getAccessToken(): Promise<string | null> {
+  const session = await getSession();
+  return session?.access_token ?? null;
+}

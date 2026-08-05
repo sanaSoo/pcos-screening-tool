@@ -194,18 +194,18 @@ export default function DashboardScreen({
       <TouchableOpacity
         activeOpacity={0.8}
         onPress={onPressNotes}
-        style={{ position: "absolute", left: s(268), top: s(24), width: s(76), alignItems: "center" }}
+        style={{ position: "absolute", left: s(278), top: s(42), width: s(60), alignItems: "center" }}
       >
         <View style={{ position: "absolute" }}>
-          <SvgXml xml={doodleSquiggleXml} width={s(77.5)} height={s(137.3)} />
+          <SvgXml xml={doodleSquiggleXml} width={s(100)} height={s(128)} />
         </View>
         <View style={{ position: "absolute" }}>
-          <SvgXml xml={bookmarkOutlineXml} width={s(77.5)} height={s(137.3)} />
+          <SvgXml xml={bookmarkOutlineXml} width={s(100)} height={s(128)} />
         </View>
         <Text
           style={{
             marginTop: s(23),
-            fontSize: s(18),
+            fontSize: s(16),
             fontWeight: "800",
             color: "#89b8c2",
             textAlign: "center",
