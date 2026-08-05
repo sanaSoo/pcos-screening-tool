@@ -75,3 +75,28 @@ export async function getAccessToken(): Promise<string | null> {
   const session = await getSession();
   return session?.access_token ?? null;
 }
+
+// For inserts into Supabase tables that need `user_id` set explicitly so
+// the RLS `with check (auth.uid() = user_id)` policy passes — see e.g.
+// lib/cycles_api.ts.
+export async function getUserId(): Promise<string | null> {
+  const session = await getSession();
+  return session?.user.id ?? null;
+}
+
+// Sends a password-reset email containing a link back into the app (via the
+// "pcosmobile" scheme registered in app.json). See App.tsx for the deep-link
+// handler that turns the incoming link into a session.
+export async function requestPasswordReset(email: string): Promise<void> {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: "pcosmobile://reset-password",
+  });
+  if (error) throw new Error(error.message);
+}
+
+// Called once the deep link from requestPasswordReset() has been turned
+// into a live session (see App.tsx) — updates that session's password.
+export async function updatePassword(newPassword: string): Promise<void> {
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+  if (error) throw new Error(error.message);
+}

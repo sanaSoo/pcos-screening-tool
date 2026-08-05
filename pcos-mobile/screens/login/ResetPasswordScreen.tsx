@@ -12,42 +12,51 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { dividerLineXml, flowerOutlineBigXml } from "../../assets/auth/icons";
 import { arrowDownXml } from "../../assets/welcome/icons";
-import { signInWithUsername } from "../../lib/auth";
+import { updatePassword } from "../../lib/auth";
 
 // Same exact-Figma-coordinates-scaled-to-device-width approach as
 // DashboardScreen.tsx — see that file's header comment for why.
 const FRAME_WIDTH = 390;
 
 type Props = {
-  onLoggedIn?: () => void;
-  onPressSignUp?: () => void;
-  onPressForgotPassword?: () => void;
+  // Called once the password has actually been changed — the caller
+  // (App.tsx) should route back to a signed-in screen, since updateUser()
+  // requires (and leaves in place) an active session from the reset deep link.
+  onPasswordUpdated?: () => void;
 };
 
-export default function LoginScreen({ onLoggedIn, onPressSignUp, onPressForgotPassword }: Props) {
+export default function ResetPasswordScreen({ onPasswordUpdated }: Props) {
   const { width: screenWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const scale = screenWidth / FRAME_WIDTH;
   const s = (n: number) => n * scale;
   const t = (n: number) => insets.top + s(n);
 
-  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  async function handleLogin() {
-    if (!username || !password) {
-      setError("Enter your username and password.");
+  async function handleSubmit() {
+    if (!password || !confirmPassword) {
+      setError("Fill in both fields.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("Passwords don't match.");
+      return;
+    }
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters.");
       return;
     }
     setError(null);
     setSubmitting(true);
     try {
-      await signInWithUsername({ username, password });
-      onLoggedIn?.();
+      await updatePassword(password);
+      onPasswordUpdated?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed.");
+      setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
       setSubmitting(false);
     }
@@ -56,26 +65,10 @@ export default function LoginScreen({ onLoggedIn, onPressSignUp, onPressForgotPa
   return (
     <View style={{ flex: 1, backgroundColor: "#ffcc7d" }}>
       <Text
-        style={{ position: "absolute", left: 0, top: t(176), width: screenWidth, fontSize: s(30), fontWeight: "800", color: "#fff", textAlign: "center" }}
+        style={{ position: "absolute", left: 0, top: t(176), width: screenWidth, fontSize: s(24), fontWeight: "800", color: "#fff", textAlign: "center" }}
       >
-        LOGiN
+        RESET PASSWORD
       </Text>
-
-      <TextInput
-        value={username}
-        onChangeText={(v) => {
-          setUsername(v);
-          setError(null);
-        }}
-        placeholder="username"
-        placeholderTextColor="rgba(255,255,255,0.75)"
-        autoCapitalize="none"
-        autoCorrect={false}
-        style={{ position: "absolute", left: s(76), top: t(255), width: s(238), height: s(30), fontSize: s(20), fontWeight: "800", color: "#fff", textAlign: "center" }}
-      />
-      <View style={{ position: "absolute", left: s(76), top: t(295) }}>
-        <SvgXml xml={dividerLineXml} width={s(238)} height={s(5)} color="#fff" />
-      </View>
 
       <TextInput
         value={password}
@@ -83,7 +76,24 @@ export default function LoginScreen({ onLoggedIn, onPressSignUp, onPressForgotPa
           setPassword(v);
           setError(null);
         }}
-        placeholder="password"
+        placeholder="new password"
+        placeholderTextColor="rgba(255,255,255,0.75)"
+        autoCapitalize="none"
+        autoCorrect={false}
+        secureTextEntry
+        style={{ position: "absolute", left: s(76), top: t(255), width: s(238), height: s(30), fontSize: s(20), fontWeight: "800", color: "#fff", textAlign: "center" }}
+      />
+      <View style={{ position: "absolute", left: s(76), top: t(295) }}>
+        <SvgXml xml={dividerLineXml} width={s(238)} height={s(5)} color="#fff" />
+      </View>
+
+      <TextInput
+        value={confirmPassword}
+        onChangeText={(v) => {
+          setConfirmPassword(v);
+          setError(null);
+        }}
+        placeholder="re-type password"
         placeholderTextColor="rgba(255,255,255,0.75)"
         autoCapitalize="none"
         autoCorrect={false}
@@ -94,29 +104,17 @@ export default function LoginScreen({ onLoggedIn, onPressSignUp, onPressForgotPa
         <SvgXml xml={dividerLineXml} width={s(238)} height={s(5)} color="#fff" />
       </View>
 
-      <TouchableOpacity activeOpacity={0.7} onPress={onPressSignUp} style={{ position: "absolute", left: 0, top: t(366), width: screenWidth, alignItems: "center" }}>
-        <Text style={{ fontSize: s(10), fontWeight: "800", color: "#fff" }}>
-          dont have an account? <Text style={{ textDecorationLine: "underline" }}>sign up</Text>
-        </Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity activeOpacity={0.7} onPress={onPressForgotPassword} style={{ position: "absolute", left: 0, top: t(382), width: screenWidth, alignItems: "center" }}>
-        <Text style={{ fontSize: s(10), fontWeight: "800", color: "#fff", textDecorationLine: "underline" }}>
-          forgot password?
-        </Text>
-      </TouchableOpacity>
-
       {error && (
-        <Text style={{ position: "absolute", left: s(30), top: t(399), width: s(330), fontSize: s(12), fontWeight: "700", color: "#7a1f2b", textAlign: "center" }}>
+        <Text style={{ position: "absolute", left: s(30), top: t(372), width: s(330), fontSize: s(12), fontWeight: "700", color: "#7a1f2b", textAlign: "center" }}>
           {error}
         </Text>
       )}
 
       <TouchableOpacity
         activeOpacity={0.8}
-        onPress={handleLogin}
+        onPress={handleSubmit}
         disabled={submitting}
-        style={{ position: "absolute", left: s(174), top: t(421), width: s(48.192), height: s(48.192), alignItems: "center", justifyContent: "center" }}
+        style={{ position: "absolute", left: s(174), top: t(410), width: s(48.192), height: s(48.192), alignItems: "center", justifyContent: "center" }}
       >
         {submitting ? (
           <ActivityIndicator color="#fff" />

@@ -1,5 +1,6 @@
 import { Pacifico_400Regular, useFonts } from "@expo-google-fonts/pacifico";
 import { StatusBar } from "expo-status-bar";
+import * as Linking from "expo-linking";
 import { useEffect, useRef, useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -7,12 +8,18 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import ScreenTransition from "./components/ScreenTransition";
 import { getSession, signOut } from "./lib/auth";
 import { listCycles } from "./lib/cycles_api";
+import { IntakeResult } from "./lib/intake_api";
 import { clearNonDemoData, isDemoDataEnabled, setDemoDataEnabled } from "./lib/seed_demo_data";
+import { supabase } from "./lib/supabase";
 import AnalyticsScreen from "./screens/analytics/AnalyticsScreen";
 import CycleTrackingScreen from "./screens/cycles/CycleTrackingScreen";
 import DashboardScreen from "./screens/dashboard/DashboardScreen";
 import HairTrackerScreen from "./screens/hair/HairTrackerScreen";
+import IntakeQuestionnaireScreen from "./screens/intake/IntakeQuestionnaireScreen";
+import IntakeResultScreen from "./screens/intake/IntakeResultScreen";
+import ForgotPasswordScreen from "./screens/login/ForgotPasswordScreen";
 import LoginScreen from "./screens/login/LoginScreen";
+import ResetPasswordScreen from "./screens/login/ResetPasswordScreen";
 import NotesScreen from "./screens/notes/NotesScreen";
 import ProfileScreen from "./screens/profile/ProfileScreen";
 import CaptureScreen from "./screens/skin_tracking/CaptureScreen";
@@ -27,6 +34,8 @@ type Screen =
   | "welcome"
   | "login"
   | "signUp"
+  | "forgotPassword"
+  | "resetPassword"
   | "dashboard"
   | "symptomCheckIn"
   | "trackerHistory"
@@ -37,12 +46,16 @@ type Screen =
   | "profile"
   | "cycleTracking"
   | "notes"
-  | "treatmentLog";
+  | "treatmentLog"
+  | "intakeQuestionnaire"
+  | "intakeResult";
 
 const SCREEN_BACKGROUNDS: Record<Screen, string> = {
   welcome: "#ffcc7d",
   login: "#ffcc7d",
   signUp: "#ffcc7d",
+  forgotPassword: "#ffcc7d",
+  resetPassword: "#ffcc7d",
   dashboard: "#fff7e7",
   symptomCheckIn: "#fff7e7",
   trackerHistory: "#fff7e7",
@@ -54,6 +67,8 @@ const SCREEN_BACKGROUNDS: Record<Screen, string> = {
   cycleTracking: "#fff7e7",
   notes: "#fff7e7",
   treatmentLog: "#fff7e7",
+  intakeQuestionnaire: "#fff7e7",
+  intakeResult: "#fff7e7",
 };
 
 // Rough "distance from Welcome" per screen — used only to decide which way
@@ -63,6 +78,8 @@ const SCREEN_DEPTH: Record<Screen, number> = {
   welcome: 0,
   login: 1,
   signUp: 1,
+  forgotPassword: 2,
+  resetPassword: 2,
   dashboard: 2,
   symptomCheckIn: 3,
   trackerHistory: 3,
@@ -72,8 +89,10 @@ const SCREEN_DEPTH: Record<Screen, number> = {
   cycleTracking: 3,
   notes: 3,
   treatmentLog: 3,
+  intakeQuestionnaire: 4,
   capture: 4,
   trackerResult: 5,
+  intakeResult: 5,
 };
 
 const comingSoon = (feature: string) => () =>
@@ -92,6 +111,11 @@ export default function App() {
     setTrackerResultData(data);
     setScreen("trackerResult");
   };
+  const [intakeResultData, setIntakeResultData] = useState<IntakeResult | null>(null);
+  const showIntakeResult = (data: IntakeResult) => {
+    setIntakeResultData(data);
+    setScreen("intakeResult");
+  };
   const goHome = () => setScreen("dashboard");
   const goProfile = () => setScreen("profile");
 
@@ -99,6 +123,30 @@ export default function App() {
     getSession()
       .then((session) => setScreen(session ? "dashboard" : "welcome"))
       .catch(() => setScreen("welcome"));
+  }, []);
+
+  // Password-reset deep links (pcosmobile://reset-password#access_token=...)
+  // arrive with the session tokens in the URL *fragment*, not query params —
+  // supabase.ts sets detectSessionInUrl: false (correct for RN, there's no
+  // URL bar), so the JS SDK never auto-parses this; it has to be done here.
+  useEffect(() => {
+    function handleUrl(url: string) {
+      const fragment = url.split("#")[1];
+      if (!fragment) return;
+      const params = new URLSearchParams(fragment);
+      const access_token = params.get("access_token");
+      const refresh_token = params.get("refresh_token");
+      if (!access_token || !refresh_token) return;
+      supabase.auth.setSession({ access_token, refresh_token }).then(({ error }) => {
+        if (!error) setScreen("resetPassword");
+      });
+    }
+
+    Linking.getInitialURL().then((url) => {
+      if (url) handleUrl(url);
+    });
+    const subscription = Linking.addEventListener("url", ({ url }) => handleUrl(url));
+    return () => subscription.remove();
   }, []);
 
   useEffect(() => {
@@ -176,6 +224,7 @@ export default function App() {
           <LoginScreen
             onLoggedIn={goHome}
             onPressSignUp={() => setScreen("signUp")}
+            onPressForgotPassword={() => setScreen("forgotPassword")}
           />
         )}
         {screen === "signUp" && (
@@ -183,6 +232,12 @@ export default function App() {
             onSignedUp={goHome}
             onPressLogIn={() => setScreen("login")}
           />
+        )}
+        {screen === "forgotPassword" && (
+          <ForgotPasswordScreen onPressLogIn={() => setScreen("login")} />
+        )}
+        {screen === "resetPassword" && (
+          <ResetPasswordScreen onPasswordUpdated={goHome} />
         )}
         {screen === "dashboard" && (
           <DashboardScreen
@@ -200,7 +255,24 @@ export default function App() {
             onPressHairTracker={() => setScreen("hairTracker")}
             onPressAnalytics={() => setScreen("analytics")}
             onPressTreatmentLog={() => setScreen("treatmentLog")}
+            onPressIntake={() => setScreen("intakeQuestionnaire")}
             onPressHome={goHome}
+            onPressProfile={goProfile}
+          />
+        )}
+        {screen === "intakeQuestionnaire" && (
+          <IntakeQuestionnaireScreen
+            onPressHome={goHome}
+            onPressQuickCheckIn={() => setScreen("symptomCheckIn")}
+            onPressProfile={goProfile}
+            onSubmitted={showIntakeResult}
+          />
+        )}
+        {screen === "intakeResult" && intakeResultData && (
+          <IntakeResultScreen
+            data={intakeResultData}
+            onPressHome={goHome}
+            onPressQuickCheckIn={() => setScreen("symptomCheckIn")}
             onPressProfile={goProfile}
           />
         )}
