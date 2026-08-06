@@ -6,11 +6,14 @@ import { Alert, StyleSheet, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import ScreenTransition from "./components/ScreenTransition";
+import WeightCheckInPrompt from "./components/WeightCheckInPrompt";
 import { getSession, signOut } from "./lib/auth";
 import { listCycles } from "./lib/cycles_api";
-import { IntakeResult } from "./lib/intake_api";
-import { clearNonDemoData, isDemoDataEnabled, setDemoDataEnabled } from "./lib/seed_demo_data";
+import { ageFromBirthdate, daysTrackingSince } from "./lib/date_utils";
+import { hasCompletedIntake, IntakeResult } from "./lib/intake_api";
+import { getProfile, missingOnboardingStep } from "./lib/profile_api";
 import { supabase } from "./lib/supabase";
+import { getLatestWeightLog, getWeightCheckInStatus, logWeight } from "./lib/weight_api";
 import AnalyticsScreen from "./screens/analytics/AnalyticsScreen";
 import CycleTrackingScreen from "./screens/cycles/CycleTrackingScreen";
 import DashboardScreen from "./screens/dashboard/DashboardScreen";
@@ -21,6 +24,8 @@ import ForgotPasswordScreen from "./screens/login/ForgotPasswordScreen";
 import LoginScreen from "./screens/login/LoginScreen";
 import ResetPasswordScreen from "./screens/login/ResetPasswordScreen";
 import NotesScreen from "./screens/notes/NotesScreen";
+import BaseInfoScreen from "./screens/onboarding/BaseInfoScreen";
+import WeightCadenceScreen from "./screens/onboarding/WeightCadenceScreen";
 import ProfileScreen from "./screens/profile/ProfileScreen";
 import CaptureScreen from "./screens/skin_tracking/CaptureScreen";
 import HistoryScreen from "./screens/skin_tracking/HistoryScreen";
@@ -34,6 +39,8 @@ type Screen =
   | "welcome"
   | "login"
   | "signUp"
+  | "baseInfo"
+  | "weightCadence"
   | "forgotPassword"
   | "resetPassword"
   | "dashboard"
@@ -54,6 +61,8 @@ const SCREEN_BACKGROUNDS: Record<Screen, string> = {
   welcome: "#ffcc7d",
   login: "#ffcc7d",
   signUp: "#ffcc7d",
+  baseInfo: "#fff7e7",
+  weightCadence: "#fff7e7",
   forgotPassword: "#ffcc7d",
   resetPassword: "#ffcc7d",
   dashboard: "#fff7e7",
@@ -78,6 +87,8 @@ const SCREEN_DEPTH: Record<Screen, number> = {
   welcome: 0,
   login: 1,
   signUp: 1,
+  baseInfo: 1.3,
+  weightCadence: 1.6,
   forgotPassword: 2,
   resetPassword: 2,
   dashboard: 2,
@@ -105,7 +116,6 @@ export default function App() {
   const [screen, setScreen] = useState<Screen | null>(null);
   const [fontsLoaded] = useFonts({ Pacifico_400Regular });
   const [periodsThisYear, setPeriodsThisYear] = useState(0);
-  const [demoDataEnabled, setDemoDataEnabledState] = useState(false);
   const [trackerResultData, setTrackerResultData] = useState<ResultScreenData | null>(null);
   const showTrackerResult = (data: ResultScreenData) => {
     setTrackerResultData(data);
@@ -116,12 +126,36 @@ export default function App() {
     setIntakeResultData(data);
     setScreen("intakeResult");
   };
+  const [accountStats, setAccountStats] = useState<{
+    daysTracking?: number;
+    age?: number;
+    weightLbs?: number;
+  }>({});
+  const [showWeightPrompt, setShowWeightPrompt] = useState(false);
   const goHome = () => setScreen("dashboard");
   const goProfile = () => setScreen("profile");
 
+  // Routes a signed-in user to whichever mandatory onboarding step (if any)
+  // is still missing, otherwise straight to the Dashboard — used on session
+  // restore, and after login/signup/password-reset, so existing users
+  // missing this data get routed through it too, not just brand-new ones.
+  // Order: base info -> weight cadence -> intake questionnaire -> dashboard.
+  async function routeAfterAuth() {
+    try {
+      const profile = await getProfile();
+      const step = missingOnboardingStep(profile);
+      if (step === "baseInfo") return setScreen("baseInfo");
+      if (step === "cadence") return setScreen("weightCadence");
+      if (!(await hasCompletedIntake())) return setScreen("intakeQuestionnaire");
+      setScreen("dashboard");
+    } catch {
+      setScreen("dashboard");
+    }
+  }
+
   useEffect(() => {
     getSession()
-      .then((session) => setScreen(session ? "dashboard" : "welcome"))
+      .then((session) => (session ? routeAfterAuth() : setScreen("welcome")))
       .catch(() => setScreen("welcome"));
   }, []);
 
@@ -156,37 +190,36 @@ export default function App() {
       const count = cycles.filter((c) => Number(c.startDate.slice(0, 4)) === currentYear).length;
       setPeriodsThisYear(count);
     });
-    isDemoDataEnabled().then(setDemoDataEnabledState);
   }, [screen]);
 
-  async function handleToggleDemoData(enabled: boolean) {
-    try {
-      await setDemoDataEnabled(enabled);
-      setDemoDataEnabledState(enabled);
-      const cycles = await listCycles();
-      const currentYear = new Date().getFullYear();
-      setPeriodsThisYear(cycles.filter((c) => Number(c.startDate.slice(0, 4)) === currentYear).length);
-      Alert.alert(
-        enabled ? "Demo data loaded" : "Demo data cleared",
-        enabled
-          ? "A month of sample PCOS-consistent data was added. Check Cycle Tracking, Symptom Check-In, and Analytics."
-          : "Demo data was removed and your previous data (if any) was restored.",
-      );
-    } catch (err) {
-      Alert.alert("Demo data toggle failed", err instanceof Error ? err.message : "Something went wrong.");
-    }
-  }
+  // Powers the "days tracking" / "age" / "weight" stats on Dashboard and
+  // Profile — both screens already had these props, just unwired.
+  useEffect(() => {
+    if (screen !== "dashboard" && screen !== "profile") return;
+    getProfile().then((profile) => {
+      setAccountStats((prev) => ({
+        ...prev,
+        daysTracking: daysTrackingSince(new Date(profile.createdAt)),
+        age: profile.birthdate ? ageFromBirthdate(profile.birthdate) : undefined,
+      }));
+    });
+    getLatestWeightLog().then((log) => {
+      setAccountStats((prev) => ({ ...prev, weightLbs: log?.weightLbs }));
+    });
+  }, [screen]);
 
-  async function handleClearNonDemoData() {
-    try {
-      await clearNonDemoData();
-      const cycles = await listCycles();
-      const currentYear = new Date().getFullYear();
-      setPeriodsThisYear(cycles.filter((c) => Number(c.startDate.slice(0, 4)) === currentYear).length);
-      Alert.alert("Real data cleared", "Everything except demo data (if any) has been removed.");
-    } catch (err) {
-      Alert.alert("Clear failed", err instanceof Error ? err.message : "Something went wrong.");
-    }
+  // Surfaces the "time to log your weight" prompt on Dashboard once the
+  // chosen cadence interval has passed since the last logged weight. No
+  // push notifications — purely an in-app check on each Dashboard visit.
+  useEffect(() => {
+    if (screen !== "dashboard") return;
+    getWeightCheckInStatus().then((status) => setShowWeightPrompt(status.isDue));
+  }, [screen]);
+
+  async function handleLogWeightFromPrompt(weightLbs: number) {
+    await logWeight(weightLbs);
+    setShowWeightPrompt(false);
+    setAccountStats((prev) => ({ ...prev, weightLbs }));
   }
 
   async function handleSignOut() {
@@ -222,25 +255,32 @@ export default function App() {
         {screen === "welcome" && <WelcomeScreen onContinue={() => setScreen("login")} />}
         {screen === "login" && (
           <LoginScreen
-            onLoggedIn={goHome}
+            onLoggedIn={routeAfterAuth}
             onPressSignUp={() => setScreen("signUp")}
             onPressForgotPassword={() => setScreen("forgotPassword")}
           />
         )}
         {screen === "signUp" && (
           <SignUpScreen
-            onSignedUp={goHome}
+            onSignedUp={routeAfterAuth}
             onPressLogIn={() => setScreen("login")}
           />
+        )}
+        {screen === "baseInfo" && (
+          <BaseInfoScreen onSubmitted={() => setScreen("weightCadence")} />
+        )}
+        {screen === "weightCadence" && (
+          <WeightCadenceScreen onSubmitted={() => setScreen("intakeQuestionnaire")} />
         )}
         {screen === "forgotPassword" && (
           <ForgotPasswordScreen onPressLogIn={() => setScreen("login")} />
         )}
         {screen === "resetPassword" && (
-          <ResetPasswordScreen onPasswordUpdated={goHome} />
+          <ResetPasswordScreen onPasswordUpdated={routeAfterAuth} />
         )}
         {screen === "dashboard" && (
           <DashboardScreen
+            daysTracking={accountStats.daysTracking}
             onPressSymptomCheckIn={() => setScreen("symptomCheckIn")}
             onPressCycleTracking={() => setScreen("cycleTracking")}
             onPressAnalytics={() => setScreen("analytics")}
@@ -318,15 +358,15 @@ export default function App() {
         )}
         {screen === "profile" && (
           <ProfileScreen
+            daysTracking={accountStats.daysTracking}
+            weightLbs={accountStats.weightLbs}
+            age={accountStats.age}
             periodsThisYear={periodsThisYear}
             onPressHome={goHome}
             onPressEditPhoto={comingSoon("Editing your photo")}
             onPressChatWithUs={comingSoon("Chat")}
             onPressPrivacy={comingSoon("Privacy settings")}
             onPressSignOut={handleSignOut}
-            demoDataEnabled={demoDataEnabled}
-            onToggleDemoData={handleToggleDemoData}
-            onPressClearNonDemoData={handleClearNonDemoData}
           />
         )}
         {screen === "cycleTracking" && (
@@ -351,6 +391,11 @@ export default function App() {
           />
         )}
         </ScreenTransition>
+        <WeightCheckInPrompt
+          visible={screen === "dashboard" && showWeightPrompt}
+          onLog={handleLogWeightFromPrompt}
+          onDismiss={() => setShowWeightPrompt(false)}
+        />
       </View>
     </SafeAreaProvider>
   );

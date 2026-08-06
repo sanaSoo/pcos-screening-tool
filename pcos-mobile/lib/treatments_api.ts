@@ -1,10 +1,8 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-
+import { getUserId } from "./auth";
 import { toDateKey } from "./cycles_api";
+import { supabase } from "./supabase";
 
-// Local-only persistence, same rationale as lib/cycles_api.ts / lib/notes_api.ts —
-// no backend for this yet, and Supabase auth is currently bypassed app-wide.
-const STORAGE_KEY = "@pcos/treatments";
+// Backed by the `treatments` table (supabase/migrations/0007_treatments.sql).
 
 // A superset of daily_tracking.ts's TrackerKey ("acne" | "hairSkin") — PCOS
 // treatments (e.g. metformin, birth control) often target the cycle or the
@@ -32,75 +30,93 @@ export type TreatmentInput = {
   notes: string | null;
 };
 
-async function readAll(): Promise<Treatment[]> {
-  const raw = await AsyncStorage.getItem(STORAGE_KEY);
-  if (!raw) return [];
-  try {
-    return JSON.parse(raw) as Treatment[];
-  } catch {
-    return [];
-  }
-}
+type TreatmentRow = {
+  id: string;
+  name: string;
+  dosage: string | null;
+  start_date: string;
+  symptom_tags: SymptomTag[];
+  notes: string | null;
+  created_at: string;
+  end_date: string | null;
+  end_reason: string | null;
+};
 
-async function writeAll(treatments: Treatment[]): Promise<void> {
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(treatments));
+function fromRow(row: TreatmentRow): Treatment {
+  return {
+    id: row.id,
+    name: row.name,
+    dosage: row.dosage,
+    date: row.start_date,
+    symptomTags: row.symptom_tags,
+    notes: row.notes,
+    createdAt: new Date(row.created_at).getTime(),
+    endDate: row.end_date,
+    endReason: row.end_reason,
+  };
 }
 
 export async function listTreatments(): Promise<Treatment[]> {
-  const treatments = await readAll();
-  return [...treatments].sort((a, b) => {
-    if (a.date !== b.date) return a.date < b.date ? 1 : -1;
-    return b.createdAt - a.createdAt;
-  });
+  const { data, error } = await supabase
+    .from("treatments")
+    .select("*")
+    .order("start_date", { ascending: false })
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data as TreatmentRow[]).map(fromRow);
 }
 
 export async function addTreatment(input: TreatmentInput): Promise<Treatment> {
-  const treatments = await readAll();
-  const treatment: Treatment = {
-    id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
-    name: input.name,
-    dosage: input.dosage,
-    date: toDateKey(input.date),
-    symptomTags: input.symptomTags,
-    notes: input.notes,
-    createdAt: Date.now(),
-    endDate: null,
-    endReason: null,
-  };
-  await writeAll([treatment, ...treatments]);
-  return treatment;
+  const userId = await getUserId();
+  if (!userId) throw new Error("You're not signed in.");
+
+  const { data, error } = await supabase
+    .from("treatments")
+    .insert({
+      user_id: userId,
+      name: input.name,
+      dosage: input.dosage,
+      start_date: toDateKey(input.date),
+      symptom_tags: input.symptomTags,
+      notes: input.notes,
+    })
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return fromRow(data as TreatmentRow);
 }
 
 export async function updateTreatment(id: string, input: TreatmentInput): Promise<Treatment> {
-  const treatments = await readAll();
-  const target = treatments.find((t) => t.id === id);
-  if (!target) throw new Error("Treatment not found.");
-  const updated: Treatment = {
-    ...target,
-    name: input.name,
-    dosage: input.dosage,
-    date: toDateKey(input.date),
-    symptomTags: input.symptomTags,
-    notes: input.notes,
-  };
-  await writeAll(treatments.map((t) => (t.id === id ? updated : t)));
-  return updated;
+  const { data, error } = await supabase
+    .from("treatments")
+    .update({
+      name: input.name,
+      dosage: input.dosage,
+      start_date: toDateKey(input.date),
+      symptom_tags: input.symptomTags,
+      notes: input.notes,
+    })
+    .eq("id", id)
+    .select()
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Treatment not found.");
+  return fromRow(data as TreatmentRow);
 }
 
 export async function endTreatment(id: string, endDate: Date, reason: string): Promise<Treatment> {
-  const treatments = await readAll();
-  const target = treatments.find((t) => t.id === id);
-  if (!target) throw new Error("Treatment not found.");
-  const updated: Treatment = {
-    ...target,
-    endDate: toDateKey(endDate),
-    endReason: reason,
-  };
-  await writeAll(treatments.map((t) => (t.id === id ? updated : t)));
-  return updated;
+  const { data, error } = await supabase
+    .from("treatments")
+    .update({ end_date: toDateKey(endDate), end_reason: reason })
+    .eq("id", id)
+    .select()
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Treatment not found.");
+  return fromRow(data as TreatmentRow);
 }
 
 export async function deleteTreatment(id: string): Promise<void> {
-  const treatments = await readAll();
-  await writeAll(treatments.filter((t) => t.id !== id));
+  const { error } = await supabase.from("treatments").delete().eq("id", id);
+  if (error) throw new Error(error.message);
 }

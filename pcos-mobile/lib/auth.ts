@@ -3,7 +3,6 @@ import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 
 export type SignUpInput = {
-  email: string;
   username: string;
   password: string;
 };
@@ -15,7 +14,14 @@ export type SignUpResult = {
   session: Session | null;
 };
 
-export async function signUp({ email, username, password }: SignUpInput): Promise<SignUpResult> {
+export async function signUp({ username, password }: SignUpInput): Promise<SignUpResult> {
+  // TEMPORARY: Supabase Auth is still email/password under the hood, so we
+  // synthesize a placeholder email from the username instead of asking for
+  // a real one — makes it fast to spin up a bunch of test accounts. Unique
+  // since usernames are unique (profiles_username_key). Revert to asking
+  // for a real email before shipping this to real users.
+  const email = `${username.toLowerCase()}@pcosmobile.local`;
+
   // The profiles row is created server-side by a database trigger (see
   // supabase/migrations/0003_handle_new_user_trigger.sql), reading the
   // username back out of this metadata — not inserted here client-side,

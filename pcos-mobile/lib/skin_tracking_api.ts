@@ -1,8 +1,5 @@
+import { API_BASE_URL } from "./api_config";
 import { getAccessToken } from "./auth";
-
-// Mac's LAN IP running the Flask backend (app.py). Re-check with
-// `ipconfig getifaddr en0` on the Mac if requests stop connecting.
-export const API_BASE_URL = "http://192.168.4.61:5001";
 
 export type ZoneScore = {
   label: string;

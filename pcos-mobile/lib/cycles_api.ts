@@ -1,15 +1,20 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getUserId } from "./auth";
+import { supabase } from "./supabase";
 
-// Local-only persistence — there's no `cycles` table/backend yet, and
-// Supabase auth is currently bypassed app-wide, so there's no reliable
-// authenticated user to key backend rows off of anyway.
-const STORAGE_KEY = "@pcos/cycles";
-
+// Backed by the `cycles` table (supabase/migrations/0005_cycles.sql) — RLS
+// scopes every row to the signed-in user, so no explicit user_id filter is
+// needed on selects, only on inserts (to satisfy the `with check`).
 export type Cycle = {
   id: string;
   startDate: string; // "YYYY-MM-DD" local calendar date
   endDate: string | null; // null = ongoing/open cycle
 };
+
+type CycleRow = { id: string; start_date: string; end_date: string | null };
+
+function fromRow(row: CycleRow): Cycle {
+  return { id: row.id, startDate: row.start_date, endDate: row.end_date };
+}
 
 // Local y/m/d, not toISOString() — that's UTC and can shift the date near
 // local midnight.
@@ -20,47 +25,48 @@ export function toDateKey(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-async function readAll(): Promise<Cycle[]> {
-  const raw = await AsyncStorage.getItem(STORAGE_KEY);
-  if (!raw) return [];
-  try {
-    return JSON.parse(raw) as Cycle[];
-  } catch {
-    return [];
-  }
-}
-
-async function writeAll(cycles: Cycle[]): Promise<void> {
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(cycles));
-}
-
 export async function listCycles(): Promise<Cycle[]> {
-  const cycles = await readAll();
-  return [...cycles].sort((a, b) => (a.startDate < b.startDate ? 1 : -1));
+  const { data, error } = await supabase
+    .from("cycles")
+    .select("*")
+    .order("start_date", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data as CycleRow[]).map(fromRow);
 }
 
 export async function getOpenCycle(): Promise<Cycle | null> {
-  const cycles = await readAll();
-  return cycles.find((c) => c.endDate === null) ?? null;
+  const { data, error } = await supabase.from("cycles").select("*").is("end_date", null).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ? fromRow(data as CycleRow) : null;
 }
 
 export async function startCycle(date: Date = new Date()): Promise<Cycle> {
-  const cycles = await readAll();
-  if (cycles.some((c) => c.endDate === null)) {
-    throw new Error("A period is already logged as in progress.");
+  const userId = await getUserId();
+  if (!userId) throw new Error("You're not signed in.");
+
+  const { data, error } = await supabase
+    .from("cycles")
+    .insert({ user_id: userId, start_date: toDateKey(date), end_date: null })
+    .select()
+    .single();
+  if (error) {
+    // 23505 = unique_violation on the cycles_one_open_per_user partial index.
+    if (error.code === "23505") throw new Error("A period is already logged as in progress.");
+    throw new Error(error.message);
   }
-  const cycle: Cycle = { id: Date.now().toString(36), startDate: toDateKey(date), endDate: null };
-  await writeAll([...cycles, cycle]);
-  return cycle;
+  return fromRow(data as CycleRow);
 }
 
 export async function endOpenCycle(date: Date = new Date()): Promise<Cycle> {
-  const cycles = await readAll();
-  const open = cycles.find((c) => c.endDate === null);
-  if (!open) throw new Error("No period is currently in progress.");
-  const updated: Cycle = { ...open, endDate: toDateKey(date) };
-  await writeAll(cycles.map((c) => (c.id === open.id ? updated : c)));
-  return updated;
+  const { data, error } = await supabase
+    .from("cycles")
+    .update({ end_date: toDateKey(date) })
+    .is("end_date", null)
+    .select()
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("No period is currently in progress.");
+  return fromRow(data as CycleRow);
 }
 
 // For backdating a period that's already fully over — both dates are known
@@ -71,13 +77,19 @@ export async function logPastCycle(startDate: Date, endDate: Date): Promise<Cycl
   if (endKey < startKey) {
     throw new Error("End date can't be before the start date.");
   }
-  const cycles = await readAll();
-  const cycle: Cycle = { id: Date.now().toString(36), startDate: startKey, endDate: endKey };
-  await writeAll([...cycles, cycle]);
-  return cycle;
+  const userId = await getUserId();
+  if (!userId) throw new Error("You're not signed in.");
+
+  const { data, error } = await supabase
+    .from("cycles")
+    .insert({ user_id: userId, start_date: startKey, end_date: endKey })
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return fromRow(data as CycleRow);
 }
 
 export async function deleteCycle(id: string): Promise<void> {
-  const cycles = await readAll();
-  await writeAll(cycles.filter((c) => c.id !== id));
+  const { error } = await supabase.from("cycles").delete().eq("id", id);
+  if (error) throw new Error(error.message);
 }

@@ -9,6 +9,8 @@ from werkzeug.utils import secure_filename
 
 import supabase_client
 from analysis import hormonal_signal
+from cycles import cycle_utils
+from intake import scoring as intake_scoring
 from skin_tracking import severity, zones
 
 app = Flask(__name__)
@@ -84,9 +86,9 @@ def upload_tracker_entry():
             "Excessive Hair Growth (Body/Facial)": int(request.form.get("excessive_hair_growth", 0)),
             "Recent Weight Gain": int(request.form.get("recent_weight_gain", 0)),
         }
-        # cycles/ isn't built yet, so there's no regularity data to pass in
+        cycle_regularity = cycle_utils.compute_regularity(g.supabase, g.user_id)
         hormonal_pattern = hormonal_signal.compute_hormonal_likelihood(
-            scores["zones"], symptom_answers, cycle_regularity=None
+            scores["zones"], symptom_answers, cycle_regularity=cycle_regularity
         )
 
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -149,6 +151,38 @@ def list_tracker_entries():
             entry[f"{tag}_photo_url"] = signed.get("signedURL")
 
     return jsonify(entries)
+
+
+@app.route("/intake/submit", methods=["POST"])
+@require_auth
+def submit_intake():
+    answers = request.get_json(silent=True) or {}
+    try:
+        result = intake_scoring.score_intake(answers)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except FileNotFoundError:
+        return jsonify({"error": "Risk model is not available yet."}), 503
+
+    g.supabase.table("intake_results").insert(
+        {
+            "user_id": g.user_id,
+            "answers": answers,
+            "risk_score": result["risk_score_pct"],
+            "risk_label": result["risk_label"],
+            "disclaimer": result["disclaimer"],
+            "model_version": result["model_version"],
+        }
+    ).execute()
+
+    return jsonify(result)
+
+
+@app.route("/intake/history", methods=["GET"])
+@require_auth
+def list_intake_history():
+    result = g.supabase.table("intake_results").select("*").order("submitted_at", desc=True).execute()
+    return jsonify(result.data or [])
 
 
 if __name__ == "__main__":

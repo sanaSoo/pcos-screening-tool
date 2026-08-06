@@ -18,8 +18,6 @@ import { signUp } from "../../lib/auth";
 // DashboardScreen.tsx — see that file's header comment for why.
 const FRAME_WIDTH = 390;
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 type Props = {
   onSignedUp?: () => void;
   onPressLogIn?: () => void;
@@ -35,7 +33,6 @@ export default function SignUpScreen({ onSignedUp, onPressLogIn }: Props) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -44,12 +41,8 @@ export default function SignUpScreen({ onSignedUp, onPressLogIn }: Props) {
   }
 
   async function handleSignUp() {
-    if (!username || !password || !confirmPassword || !email) {
+    if (!username || !password || !confirmPassword) {
       setError("Fill in every field.");
-      return;
-    }
-    if (!EMAIL_PATTERN.test(email)) {
-      setError("Enter a valid email.");
       return;
     }
     if (password !== confirmPassword) {
@@ -59,7 +52,7 @@ export default function SignUpScreen({ onSignedUp, onPressLogIn }: Props) {
     setError(null);
     setSubmitting(true);
     try {
-      const { session } = await signUp({ email, username, password });
+      const { session } = await signUp({ username, password });
       if (session) {
         onSignedUp?.();
       } else {
@@ -121,28 +114,14 @@ export default function SignUpScreen({ onSignedUp, onPressLogIn }: Props) {
         <SvgXml xml={dividerLineXml} width={s(238)} height={s(5)} color="#fff" />
       </View>
 
-      <TextInput
-        value={email}
-        onChangeText={(v) => { setEmail(v); clearError(); }}
-        placeholder="email"
-        placeholderTextColor="rgba(255,255,255,0.75)"
-        autoCapitalize="none"
-        autoCorrect={false}
-        keyboardType="email-address"
-        style={{ position: "absolute", left: s(76), top: t(450), width: s(238), height: s(30), fontSize: s(20), fontWeight: "800", color: "#fff", textAlign: "center" }}
-      />
-      <View style={{ position: "absolute", left: s(76), top: t(490) }}>
-        <SvgXml xml={dividerLineXml} width={s(238)} height={s(5)} color="#fff" />
-      </View>
-
-      <TouchableOpacity activeOpacity={0.7} onPress={onPressLogIn} style={{ position: "absolute", left: 0, top: t(507), width: screenWidth, alignItems: "center" }}>
+      <TouchableOpacity activeOpacity={0.7} onPress={onPressLogIn} style={{ position: "absolute", left: 0, top: t(450), width: screenWidth, alignItems: "center" }}>
         <Text style={{ fontSize: s(10), fontWeight: "800", color: "#fff" }}>
           already have an account? <Text style={{ textDecorationLine: "underline" }}>log in</Text>
         </Text>
       </TouchableOpacity>
 
       {error && (
-        <Text style={{ position: "absolute", left: s(30), top: t(524), width: s(330), fontSize: s(12), fontWeight: "700", color: "#7a1f2b", textAlign: "center" }}>
+        <Text style={{ position: "absolute", left: s(30), top: t(467), width: s(330), fontSize: s(12), fontWeight: "700", color: "#7a1f2b", textAlign: "center" }}>
           {error}
         </Text>
       )}
@@ -151,7 +130,7 @@ export default function SignUpScreen({ onSignedUp, onPressLogIn }: Props) {
         activeOpacity={0.8}
         onPress={handleSignUp}
         disabled={submitting}
-        style={{ position: "absolute", left: s(172), top: t(538), width: s(48.192), height: s(48.192), alignItems: "center", justifyContent: "center" }}
+        style={{ position: "absolute", left: s(172), top: t(481), width: s(48.192), height: s(48.192), alignItems: "center", justifyContent: "center" }}
       >
         {submitting ? (
           <ActivityIndicator color="#fff" />

@@ -5,7 +5,6 @@ import {
   Image,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TouchableOpacity,
   useWindowDimensions,
@@ -37,9 +36,6 @@ type Props = {
   onPressChatWithUs?: () => void;
   onPressPrivacy?: () => void;
   onPressSignOut?: () => void;
-  demoDataEnabled?: boolean;
-  onToggleDemoData?: (enabled: boolean) => void;
-  onPressClearNonDemoData?: () => void;
 };
 
 export default function ProfileScreen({
@@ -54,9 +50,6 @@ export default function ProfileScreen({
   onPressChatWithUs,
   onPressPrivacy,
   onPressSignOut,
-  demoDataEnabled,
-  onToggleDemoData,
-  onPressClearNonDemoData,
 }: Props) {
   const { width: screenWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -251,34 +244,6 @@ export default function ProfileScreen({
       >
         <Text style={{ fontSize: s(20), fontWeight: "800", color: "#ae0000" }}>sign out</Text>
       </TouchableOpacity>
-
-      {(__DEV__ && (onToggleDemoData || onPressClearNonDemoData)) && (
-        <View
-          style={{ position: "absolute", left: 80, top: t(505), width: s(200), flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
-        >
-          {onToggleDemoData && (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: s(4) }}>
-              <Text style={{ fontSize: s(13), fontWeight: "800", color: "#89b8c2", textDecorationLine: "underline" }}>
-                demo data
-              </Text>
-              <Switch
-                value={!!demoDataEnabled}
-                onValueChange={onToggleDemoData}
-                trackColor={{ false: "#d9d9d9", true: "#89b8c2" }}
-                style={{ transform: [{ scale: s(0.7) }] }}
-              />
-            </View>
-          )}
-
-          {onPressClearNonDemoData && (
-            <TouchableOpacity activeOpacity={0.6} onPress={onPressClearNonDemoData}>
-              <Text style={{ fontSize: s(13), fontWeight: "800", color: "#ae0000", textDecorationLine: "underline" }}>
-                clear real data
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      )}
     </ScrollView>
   );
 }

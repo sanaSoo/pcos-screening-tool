@@ -6,3 +6,8 @@ mediapipe==0.10.21
 transformers
 torch
 pillow
+pandas
+scikit-learn
+xgboost
+imbalanced-learn
+joblib

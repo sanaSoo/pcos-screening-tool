@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   ActivityIndicator,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,7 +12,9 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import InfoButton from "../../components/InfoButton";
+import MiniCalendar from "../../components/MiniCalendar";
 import NavigationBar from "../../components/NavigationBar";
+import { logPastCycle } from "../../lib/cycles_api";
 import { IntakeAnswers, IntakeResult, submitIntake } from "../../lib/intake_api";
 
 const PERIOD_FREQUENCY_OPTIONS: { value: 1 | 2 | 3; label: string }[] = [
@@ -19,6 +22,16 @@ const PERIOD_FREQUENCY_OPTIONS: { value: 1 | 2 | 3; label: string }[] = [
   { value: 2, label: "Every ~2 months" },
   { value: 3, label: "Irregular / longer" },
 ];
+
+const PERIOD_LOG_LABELS = ["Most recent period", "2nd most recent", "3rd most recent"];
+
+const MONTH_NAMES_SHORT = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+function formatPeriodDate(d: Date) {
+  return `${MONTH_NAMES_SHORT[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+}
 
 type CheckboxKey =
   | "excessiveHairGrowth"
@@ -64,6 +77,12 @@ export default function IntakeQuestionnaireScreen({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Start dates for the user's 3 most recent periods, most recent first.
+  // No end dates asked — we derive each one from periodLengthDays below, so
+  // the cycles table still gets a real end_date for every past period.
+  const [periodDates, setPeriodDates] = useState<(Date | null)[]>([null, null, null]);
+  const [editingPeriodIndex, setEditingPeriodIndex] = useState<number | null>(null);
+
   function toggleCheck(key: CheckboxKey) {
     setChecks((prev) => ({ ...prev, [key]: !prev[key] }));
   }
@@ -77,6 +96,15 @@ export default function IntakeQuestionnaireScreen({
     }
     if (!periodLengthDays || Number.isNaN(periodLength) || periodLength <= 0) {
       setError("Enter how many days your period usually lasts.");
+      return;
+    }
+    if (periodDates.some((d) => d === null)) {
+      setError("Log the start dates of your 3 most recent periods.");
+      return;
+    }
+    const [mostRecent, middle, oldest] = periodDates as Date[];
+    if (mostRecent.getTime() <= middle.getTime() || middle.getTime() <= oldest.getTime()) {
+      setError("List your periods from most to least recent, with no repeated dates.");
       return;
     }
 
@@ -95,6 +123,17 @@ export default function IntakeQuestionnaireScreen({
         moodSwings: checks.moodSwings ? 1 : 0,
       };
       const result = await submitIntake(answers);
+
+      // Seed cycle history from the 3 logged start dates so Cycle Tracking
+      // and Analytics have real data right away, instead of starting empty.
+      await Promise.all(
+        (periodDates as Date[]).map((start) => {
+          const end = new Date(start);
+          end.setDate(end.getDate() + periodLength - 1);
+          return logPastCycle(start, end);
+        }),
+      );
+
       onSubmitted?.(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Request failed");
@@ -156,6 +195,24 @@ export default function IntakeQuestionnaireScreen({
           style={styles.textInput}
         />
 
+        <Text style={styles.sectionLabel}>Your 3 most recent periods</Text>
+        <Text style={styles.helperText}>
+          Just the start dates — we'll fill in the rest using your period length above.
+        </Text>
+        {PERIOD_LOG_LABELS.map((label, i) => (
+          <TouchableOpacity
+            key={label}
+            style={styles.periodDateField}
+            onPress={() => setEditingPeriodIndex(i)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.periodDateLabel}>{label}</Text>
+            <Text style={styles.periodDateValue}>
+              {periodDates[i] ? formatPeriodDate(periodDates[i]!) : "Select date"}
+            </Text>
+          </TouchableOpacity>
+        ))}
+
         <Text style={styles.sectionLabel}>Do any of these apply to you?</Text>
         {CHECKBOX_QUESTIONS.map((q) => (
           <TouchableOpacity
@@ -179,6 +236,41 @@ export default function IntakeQuestionnaireScreen({
         </TouchableOpacity>
       </ScrollView>
       <NavigationBar onPressHome={onPressHome} onPressQuickCheckIn={onPressQuickCheckIn} onPressProfile={onPressProfile} />
+
+      <Modal
+        visible={editingPeriodIndex !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setEditingPeriodIndex(null)}
+      >
+        <View style={styles.formOverlay}>
+          <View style={styles.formCard}>
+            <Text style={styles.formTitle}>
+              {editingPeriodIndex !== null ? PERIOD_LOG_LABELS[editingPeriodIndex] : ""}
+            </Text>
+            {editingPeriodIndex !== null && (
+              <MiniCalendar
+                initialDate={periodDates[editingPeriodIndex] ?? undefined}
+                maxDate={new Date()}
+                onSelect={(d) => {
+                  setPeriodDates((prev) => {
+                    const next = [...prev];
+                    next[editingPeriodIndex] = d;
+                    return next;
+                  });
+                }}
+              />
+            )}
+            <TouchableOpacity
+              style={styles.doneButton}
+              onPress={() => setEditingPeriodIndex(null)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.doneButtonText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -219,6 +311,52 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#000",
   },
+  helperText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "rgba(0,0,0,0.5)",
+    alignSelf: "flex-start",
+    marginTop: -4,
+    marginBottom: 8,
+  },
+  periodDateField: {
+    width: "100%",
+    backgroundColor: "#fff",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.1)",
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginBottom: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  periodDateLabel: { fontSize: 13, fontWeight: "700", color: "rgba(0,0,0,0.6)" },
+  periodDateValue: { fontSize: 15, fontWeight: "800", color: "#000" },
+  formOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  formCard: {
+    width: "100%",
+    maxWidth: 340,
+    backgroundColor: "#fff7e7",
+    borderRadius: 15,
+    padding: 20,
+  },
+  formTitle: { fontSize: 18, fontWeight: "800", color: "#000", textAlign: "center", marginBottom: 12 },
+  doneButton: {
+    backgroundColor: "#e47083",
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+    marginTop: 16,
+  },
+  doneButtonText: { fontSize: 15, fontWeight: "800", color: "#fff7e7" },
   checkboxRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 12, alignSelf: "flex-start" },
   checkbox: {
     width: 22,

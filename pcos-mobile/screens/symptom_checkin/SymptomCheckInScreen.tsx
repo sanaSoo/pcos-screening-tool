@@ -12,6 +12,7 @@ type Props = {
   onPressHairTracker?: () => void;
   onPressAnalytics?: () => void;
   onPressTreatmentLog?: () => void;
+  onPressIntake?: () => void;
   onPressHome?: () => void;
   onPressProfile?: () => void;
 };
@@ -21,6 +22,7 @@ export default function SymptomCheckInScreen({
   onPressHairTracker,
   onPressAnalytics,
   onPressTreatmentLog,
+  onPressIntake,
   onPressHome,
   onPressProfile,
 }: Props) {
@@ -93,6 +95,15 @@ export default function SymptomCheckInScreen({
         >
           <Text style={styles.treatmentLogText}>Treatment Log</Text>
           <SvgXml xml={pillIconXml} width={18} height={18} color="#fff7e7" />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.intakeButton}
+          onPress={onPressIntake}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.intakeText}>PCOS Risk Check-In</Text>
+          <SvgXml xml={trendUpXml} width={22} height={15} color="#fff7e7" />
         </TouchableOpacity>
       </ScrollView>
 
@@ -171,4 +182,15 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   treatmentLogText: { color: "#fff7e7", fontSize: 14, fontWeight: "800" },
+  intakeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#a8bf89",
+    borderRadius: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    marginTop: 12,
+  },
+  intakeText: { color: "#fff7e7", fontSize: 14, fontWeight: "800" },
 });

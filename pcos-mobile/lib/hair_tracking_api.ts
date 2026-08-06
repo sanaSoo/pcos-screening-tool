@@ -1,10 +1,8 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-
+import { getUserId } from "./auth";
 import { toDateKey } from "./cycles_api";
+import { supabase } from "./supabase";
 
-// Local-only persistence — same rationale as lib/cycles_api.ts: no backend
-// table for this yet.
-const STORAGE_KEY = "@pcos/hairLogs";
+// Backed by the `hair_logs` table (supabase/migrations/0006_hair_logs.sql).
 
 // 0 = none, 1 = mild, 2 = moderate, 3 = severe.
 export type HairSeverity = 0 | 1 | 2 | 3;
@@ -16,23 +14,19 @@ export type HairLog = {
   hairThinning: HairSeverity; // scalp hair thinning/shedding
 };
 
-async function readAll(): Promise<HairLog[]> {
-  const raw = await AsyncStorage.getItem(STORAGE_KEY);
-  if (!raw) return [];
-  try {
-    return JSON.parse(raw) as HairLog[];
-  } catch {
-    return [];
-  }
-}
+type HairLogRow = { id: string; log_date: string; hair_growth: HairSeverity; hair_thinning: HairSeverity };
 
-async function writeAll(logs: HairLog[]): Promise<void> {
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(logs));
+function fromRow(row: HairLogRow): HairLog {
+  return { id: row.id, date: row.log_date, hairGrowth: row.hair_growth, hairThinning: row.hair_thinning };
 }
 
 export async function listHairLogs(): Promise<HairLog[]> {
-  const logs = await readAll();
-  return [...logs].sort((a, b) => (a.date < b.date ? 1 : -1));
+  const { data, error } = await supabase
+    .from("hair_logs")
+    .select("*")
+    .order("log_date", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data as HairLogRow[]).map(fromRow);
 }
 
 export async function logHair(
@@ -40,18 +34,24 @@ export async function logHair(
   hairThinning: HairSeverity,
   date: Date = new Date(),
 ): Promise<HairLog> {
-  const logs = await readAll();
-  const log: HairLog = {
-    id: Date.now().toString(36),
-    date: toDateKey(date),
-    hairGrowth,
-    hairThinning,
-  };
-  await writeAll([...logs, log]);
-  return log;
+  const userId = await getUserId();
+  if (!userId) throw new Error("You're not signed in.");
+
+  const { data, error } = await supabase
+    .from("hair_logs")
+    .insert({
+      user_id: userId,
+      log_date: toDateKey(date),
+      hair_growth: hairGrowth,
+      hair_thinning: hairThinning,
+    })
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return fromRow(data as HairLogRow);
 }
 
 export async function deleteHairLog(id: string): Promise<void> {
-  const logs = await readAll();
-  await writeAll(logs.filter((l) => l.id !== id));
+  const { error } = await supabase.from("hair_logs").delete().eq("id", id);
+  if (error) throw new Error(error.message);
 }
